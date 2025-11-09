@@ -1,0 +1,1698 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Shift & Overtime Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Light gray background */
+        }
+        /* Custom calendar styling */
+        .calendar-day {
+            min-height: 100px;
+            cursor: pointer;
+            transition: all 0.2s;
+            @apply border border-gray-200 p-2 rounded-lg relative text-sm;<div class="flex items-center text-xs text-indigo-700 mt-1">
+           <div class="flex items-center text-xs text-indigo-700 mt-1">
+            <p class="font-medium mr-4">Version: <span class="font-bold">1.8 RT</span></p>
+            <p id="device-info"></p> 
+        </div>
+        </div>version
+        }
+        .calendar-day:hover:not(.day-disabled) {
+            @apply shadow-md scale-[1.01] bg-gray-50;
+        }
+        .day-disabled {
+            background-color: #e2e8f0;
+            color: #94a3b0;
+        }
+
+        /* --- COLOR-CODING BASED ON SHIFT TYPE AND MODIFICATION --- */
+        
+        /* Standard Weekday (Mon-Fri) */
+        .shift-standard-default { background-color: #d1fae5; } /* Light Green (Green 100) */
+        .shift-standard-modified { background-color: #6ee7b7; } /* Darker Green (Green 300) */
+        
+        /* Standard Weekend (Sat/Sun) */
+        .shift-weekend-default { background-color: #ffe4c4; } /* Light Orange (Orange 100) */
+        .shift-weekend-modified { background-color: #fdba74; } /* Darker Orange (Orange 300) */
+        
+        /* General Overtime (Non-BH) */
+        .shift-overtime-default { background-color: #fbcfe8; } /* Light Pink (Pink 100) */
+        .shift-overtime-modified { background-color: #f472b6; } /* Darker Pink (Pink 400) */
+        
+        /* Bank Holiday Overtime */
+        .shift-bh-ot-default { background-color: #f3e8ff; } /* Light Purple (Purple 100) */
+        .shift-bh-ot-modified { background-color: #c084fc; } /* Darker Purple (Purple 400) */
+        
+        /* Bank Holiday (Standard Hours) */
+        .shift-bank-holiday { background-color: #e2e8f0; } /* Light Grey (Gray 200) */
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="mb-8">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Personal Shift Tracker     </h1>
+                          <p class="text-sm font-medium">Version: 1.8 RT </p>
+        </header>
+
+        <div id="displayed-profile-section" class="bg-indigo-50 p-4 rounded-xl shadow-inner mb-4 flex justify-between items-center hidden">
+            <div class="text-indigo-900 space-y-1">
+                <p class="text-sm font-medium">Name: <span id="display-userName" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Payroll No: <span id="display-payrollNumber" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Email: <span id="display-userEmail" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Contracted Hours: <span id="display-contractedHours" class="font-bold"></span></p>
+				<div class="flex items-center text-xs text-indigo-700 mt-1">
+            <p class="font-medium mr-4">Version: <span class="font-bold">1.8 RT</span></p>
+            <p id="device-info"></p> 
+        </div>
+            </div>
+            <button onclick="editProfile()" class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold py-1 px-3 rounded-lg bg-white/50 hover:bg-white transition">
+                Change
+            </button>
+        </div>
+
+        <div id="profile-input-section" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Details (Saved Locally)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label for="userName" class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="userName" placeholder="Your Name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="payrollNumber" class="block text-sm font-medium text-gray-700">Payroll Number</label>
+                    <input type="text" id="payrollNumber" placeholder="Your Payroll No." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="userEmail" class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <input type="email" id="userEmail" placeholder="username@email.com" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="contractedHoursSelect" class="block text-sm font-medium text-gray-700">Contracted Hours (Per Week)</label>
+                    <select id="contractedHoursSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" onchange="checkCustomContractedHours()">
+                        <option value="37.5">37.5 Hours (Default)</option>
+                        <option value="25">25.0 Hours</option>
+                        <option value="12.5">12.5 Hours</option>
+                        <option value="custom">Custom Hours</option>
+                    </select>
+                </div>
+                <div id="customHoursInputContainer" class="hidden">
+                    <label for="customContractedHours" class="block text-sm font-medium text-gray-700">Custom Hours</label>
+                    <input type="number" step="0.5" id="customContractedHours" placeholder="e.g. 30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div class="flex items-end md:col-span-1">
+                    <button onclick="saveProfile()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out">
+                        Save Profile
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="changeMonth(-1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12 15.75 4.5" /></svg></button>
+                <h2 id="current-month-year" class="text-3xl font-bold text-gray-900"></h2>
+                <button onclick="changeMonth(1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5 15.75 12 8.25 19.5" /></svg></button>
+            </div>
+            
+            <div class="grid grid-cols-7 gap-1 text-center font-medium text-gray-600 mb-2">
+                <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+            </div>
+
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1">
+                </div>
+            
+            <div class="mt-6 flex justify-between items-center pt-4 border-t border-gray-200">
+                <button onclick="clearAllShifts()" class="
+                    bg-red-600 hover:bg-red-700 text-white font-bold 
+                    py-2 px-4 rounded-lg shadow-lg transition duration-150 ease-in-out">
+                    <span>Clear <span id="clear-month-text">Current Month's</span> Shifts</span>
+                </button>
+                
+                <button id="report-button" onclick="generateReport()" class="
+                    bg-purple-600 hover:bg-purple-700 text-white font-bold 
+                    py-2 px-4 rounded-lg shadow-lg hover:bg-purple-700 transition duration-150 ease-in-out">
+                    <span id="report-button-text">Generate Monthly Report</span>
+                </button>
+            </div>
+        </div>
+
+        <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50">
+            <div class="bg-white p-6 rounded-lg shadow-2xl text-center">
+                <p id="message-text" class="text-lg font-medium text-gray-700">Loading...</p>
+                <button onclick="hideMessageBox()" class="mt-4 bg-indigo-500 text-white py-2 px-4 rounded-lg hidden" id="message-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="shift-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-40 p-4">
+        <div class="bg-white w-full max-w-lg max-h-[90vh] rounded-xl shadow-2xl p-6 transform transition-all duration-300 overflow-y-auto">
+            <h3 class="text-2xl font-bold text-gray-800 mb-2" id="modal-date-display">Shift Details for [Date]</h3>
+            <p class="text-sm text-gray-500 mb-6">Standard Shift: 07:20 - 20:30 (12.5 hours total, 40 min breaks)</p>
+            <form id="shift-form">
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Shift Type</label>
+                    <div class="mt-1 space-y-2">
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Standard" class="form-radio text-indigo-600 h-4 w-4" checked onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Standard (Weekday/Weekend)</span>
+                        </label>
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Overtime" class="form-radio text-red-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Overtime (Non-BH)</span>
+                        </label>
+                        <hr class="my-1 border-gray-100">
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Bank Holiday" class="form-radio text-blue-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Bank Holiday (Standard Hours)</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="shiftType" value="Bank Holiday Overtime" class="form-radio text-purple-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Bank Holiday Overtime</span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label for="startTime" class="block text-sm font-medium text-gray-700">Start Time (HH:MM)</label>
+                        <input type="time" id="startTime" value="07:20" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="finishTime" class="block text-sm font-medium text-gray-700">Finish Time (HH:MM)</label>
+                        <input type="time" id="finishTime" value="20:30" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                    </div>
+                </div>
+
+                <div id="breaks-section" class="mb-6 border p-4 rounded-lg bg-gray-50">
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Breaks (20 min each)</p>
+                    <p class="text-xs text-gray-500 mb-2">Adjustable if shift starts after 13:00 or finishes before 18:00.</p>
+                    <label for="breaksCount" class="block text-sm font-medium text-gray-700">Number of Unpaid 20 min Breaks</label>
+                    <select id="breaksCount" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                        <option value="2">2 (40 minutes total - Default)</option>
+                        <option value="1">1 (20 minutes total)</option>
+                        <option value="0">0 (0 minutes total)</option>
+                    </select>
+                </div>
+
+                <div id="deviation-selectors" class="mb-6 space-y-3 p-4 border rounded-lg bg-yellow-50/70">
+                    <p class="font-bold text-lg mb-2 text-yellow-800">Time Deviation Management</p>
+                    </div>
+
+                <div class="mb-6 p-4 border rounded-lg bg-indigo-50">
+                    <p class="font-bold text-lg mb-2 text-indigo-700">Calculated Shift Summary</p>
+                    <div id="enhancement-display" class="space-y-1 text-sm text-indigo-800">
+                        </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <div class="flex space-x-2">
+                        <button type="button" onclick="closeShiftModal()" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">Cancel</button>
+                        <button type="button" onclick="deleteShift()" id="delete-shift-btn" class="py-2 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition hidden">Delete Shift</button>
+                    </div>
+                    <button type="submit" class="py-2 px-6 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">Save Shift</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+
+<div id="report-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-40 p-4">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-xl shadow-2xl p-6 transform transition-all duration-300 overflow-y-auto">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2" id="report-title">Monthly Shift Report</h3>
+        <p class="text-sm text-gray-500 mb-6" id="report-period"></p>
+        
+        <div id="report-content" class="space-y-4">
+            <div class="bg-gray-100 p-4 rounded-lg">
+                <p class="font-semibold text-lg mb-2">Summary Totals (Hours)</p>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <tbody id="report-table-body" class="divide-y divide-gray-200 text-gray-700">
+                        </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-8 pt-4 border-t border-gray-200">
+                <p class="font-semibold text-lg mb-4 text-gray-800">Detailed Shift Log</p>
+                <div id="detailed-shift-list" class="space-y-3">
+                    </div>
+            </div>
+        </div>
+        
+        <div class="p-4 border-t border-gray-200 mt-6 flex justify-between items-center">
+         
+            <div class="flex items-center space-x-2 text-sm">
+                <label for="current-print-scale" class="font-medium text-gray-700">PDF Scale:</label>
+                <div class="flex items-center">
+                    <input 
+                        type="number" 
+                        id="current-print-scale" 
+                        min="10" 
+                        max="200"
+                        value="100" 
+                        onchange="changePrintScale()" 
+                        class="w-16 p-1 border border-gray-300 rounded-l-md text-center focus:ring-indigo-500 focus:border-indigo-500"
+                    >
+                    <span class="p-1 border border-l-0 border-gray-300 bg-gray-50 rounded-r-md text-gray-600">%</span>
+                </div>
+                <button onclick="resetPrintScale()" title="Reset to device default" class="p-1 text-red-500 hover:text-red-700">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7.42V6a1 1 0 012 0v2.414l.879-.879a1 1 0 111.414 1.414L8.414 11H12a1 1 0 110 2H6a1 1 0 01-1-1V5.101A7.002 7.002 0 014 8.051V3a1 1 0 011-1zm6 16a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 111.885-.666A5.002 5.002 0 0014.001 12.58V14a1 1 0 01-2 0v-2.414l-.879.879a1 1 0 11-1.414-1.414L11.586 9H8a1 1 0 110-2h6a1 1 0 011 1v5.101A7.002 7.002 0 0116 11.949V17a1 1 0 01-1 1z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="flex space-x-3">
+                <button onclick="closeReportModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition">
+                    Close
+                </button>
+                <button onclick="printReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-md">
+                    Print Report (PDF)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+	
+    <script>
+        // --- GLOBAL STATE ---
+        let currentYear, currentMonth;
+        // UPDATED: Added contractedHours field
+        let userProfile = { name: '', payrollNumber: '', userEmail: '', contractedHours: 37.5 };
+        let userShifts = {}; // Key: "YYYY-MM-DD", Value: { shiftData }
+        let selectedDate = null;
+        let currentReportData = { totals: {}, shiftsInMonth: [], monthName: '' }; // Cache for print function
+
+        // Standard shift times
+        const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
+        const DEFAULT_END_TIME_MINUTES = timeToMinutes('20:30');
+        const NIGHT_DUTY_START_MINUTES = timeToMinutes('20:00');
+        const NIGHT_DUTY_END_MINUTES = timeToMinutes('20:30');
+
+        // --- LOCAL STORAGE KEY CONSTANTS ---
+        const PROFILE_KEY = 'userProfile';
+        const SHIFTS_KEY = 'userShifts';
+
+		// Detect if the user is on an Apple device (Mac, iPhone, iPad, iPod)
+		const isAppleDevice = /Macintosh|Mac OS|iPhone|iPad|iPod/.test(navigator.userAgent);
+
+		// This will store the active print scale factor (e.g., 1.0 or 0.73).
+		// Initialized in loadInitialData()
+		let PRINT_SCALE_FACTOR;
+			// The default scale for Apple devices
+			const APPLE_SCALE = 0.73;
+			// The default scale for all other devices
+			const DEFAULT_SCALE = 1.0;
+
+        // --- UTILITY FUNCTIONS ---
+		// --- DEVICE DETECTION ---
+
+/**
+ * @description Detects and returns the user's device type and browser name.
+ * @returns {string} Formatted string like "Device: Windows PC, Browser: Chrome"
+ */
+function detectDeviceAndBrowser() {
+    const userAgent = navigator.userAgent;
+    let device = 'Unknown Device';
+    let browser = 'Unknown Browser';
+
+    // 1. Detect Device Type
+    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+        device = 'iOS (iPhone/iPad)';
+    } else if (/Android/.test(userAgent)) {
+        device = 'Android Mobile';
+    } else if (/Macintosh|Mac OS X/.test(userAgent)) {
+        device = 'Mac/OSX PC';
+    } else if (/Windows/.test(userAgent)) {
+        device = 'Windows PC';
+    } else if (/Linux/.test(userAgent)) {
+        device = 'Linux PC';
+    } else if (/CrOS/.test(userAgent)) {
+        device = 'ChromeOS';
+    }
+
+    // 2. Detect Browser
+    if (userAgent.indexOf("Edg") !== -1) {
+        browser = "Microsoft Edge";
+    } else if (userAgent.indexOf("Chrome") !== -1 && userAgent.indexOf("Edg") === -1) {
+        // Check for Edge first, then Chrome
+        browser = "Google Chrome";
+    } else if (userAgent.indexOf("Safari") !== -1) {
+        // Must check Safari after Chrome/Edge as they also contain "Safari"
+        browser = "Safari";
+    } else if (userAgent.indexOf("Firefox") !== -1) {
+        browser = "Mozilla Firefox";
+    } else if (userAgent.indexOf("Trident") !== -1 || userAgent.indexOf("MSIE") !== -1) {
+        browser = "Internet Explorer";
+    }
+
+    return `System: ${device}, Browser: ${browser}`;
+}
+
+		
+        // Helper: Convert "HH:MM" string to minutes from midnight
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return (hours * 60) + minutes;
+        }
+
+        // Helper: Convert minutes to decimal hours (two decimal places)
+        function minutesToDecimalHours(minutes) {
+            return (minutes / 60);
+        }
+        
+        // Helper: Format hours for display
+function formatHours(minutes) {
+    // FIX: Check if the input is a valid, finite number.
+    if (!Number.isFinite(minutes)) {
+        return '0.00'; // Return a safe default string (e.g., '0.00') instead of 'NaN'
+    }
+    return minutesToDecimalHours(minutes).toFixed(2); // If valid, proceed as normal
+}
+        
+        // Helper: Format hours for the print form (blank if zero)
+        function formatHoursForPrint(minutes) {
+            return minutes > 0.01 ? minutesToDecimalHours(minutes).toFixed(2) : '';
+        }
+
+        function showMessageBox(title, message, closable = false) {
+            const box = document.getElementById('message-box');
+            document.getElementById('message-text').innerHTML = `<strong>${title}:</strong> ${message}`;
+            const closeBtn = document.getElementById('message-close-btn');
+            if (closable) {
+                closeBtn.classList.remove('hidden');
+                closeBtn.onclick = hideMessageBox;
+            } else {
+                closeBtn.classList.add('hidden');
+            }
+            box.classList.remove('hidden');
+        }
+
+        function hideMessageBox() {
+            document.getElementById('message-box').classList.add('hidden');
+        }
+
+        // --- LOCAL STORAGE DATA HANDLING ---
+
+        function loadInitialData() {
+            // Load Print Scale from Local Storage
+    const storedScale = localStorage.getItem('printScaleFactor');
+    if (storedScale) {
+        PRINT_SCALE_FACTOR = parseFloat(storedScale);
+    } else {
+        // If no scale is stored, apply the device-specific default
+        PRINT_SCALE_FACTOR = isAppleDevice ? APPLE_SCALE : DEFAULT_SCALE;
+    }
+
+    // Set the display text for the scale button/input if it exists
+    const scaleDisplayElement = document.getElementById('current-print-scale');
+    if (scaleDisplayElement) {
+        scaleDisplayElement.value = (PRINT_SCALE_FACTOR * 100).toFixed(0); // Display as percentage (e.g., 73)
+    }
+			
+			// Load Profile
+            const storedProfile = localStorage.getItem(PROFILE_KEY);
+            if (storedProfile) {
+                try {
+                    const parsedProfile = JSON.parse(storedProfile);
+                    userProfile = {
+                        name: parsedProfile.name || '',
+                        payrollNumber: parsedProfile.payrollNumber || '',
+                        userEmail: parsedProfile.userEmail || 'username@email.com',
+                        // NEW: Load contractedHours, default to 37.5 if missing
+                        contractedHours: parseFloat(parsedProfile.contractedHours) || 37.5
+                    };
+                    
+                    document.getElementById('userName').value = userProfile.name;
+                    document.getElementById('payrollNumber').value = userProfile.payrollNumber;
+                    document.getElementById('userEmail').value = userProfile.userEmail;
+
+                    // NEW: Set contracted hours in the select/custom input
+                    const hours = userProfile.contractedHours;
+                    const select = document.getElementById('contractedHoursSelect');
+                    const customInput = document.getElementById('customContractedHours');
+
+                    // Find if the stored value is in the default options
+                    const options = Array.from(select.options).map(opt => opt.value);
+                    if (options.includes(String(hours))) {
+                        select.value = String(hours);
+                        document.getElementById('customHoursInputContainer').classList.add('hidden');
+                    } else {
+                        // It's a custom value
+                        select.value = 'custom';
+                        customInput.value = hours;
+                        document.getElementById('customHoursInputContainer').classList.remove('hidden');
+                    }
+
+
+                } catch (e) {
+                    console.error("Error parsing stored profile:", e);
+                }
+            } else {
+                // If no profile exists, set the defaults
+                userProfile.userEmail = 'username@email.com';
+                document.getElementById('userEmail').value = 'username@email.com';
+                document.getElementById('contractedHoursSelect').value = '37.5';
+            }
+            
+            // Call profile display update after loading
+            updateProfileDisplay();
+
+            // Load Shifts
+            const storedShifts = localStorage.getItem(SHIFTS_KEY);
+            if (storedShifts) {
+                try {
+                    userShifts = JSON.parse(storedShifts);
+                } catch (e) {
+                    console.error("Error parsing stored shifts:", e);
+                    userShifts = {};
+                }
+            }
+
+            renderCalendar(); // Initial render after loading data
+        }
+        
+        function updateProfileDisplay() {
+            const inputSection = document.getElementById('profile-input-section');
+            const displaySection = document.getElementById('displayed-profile-section');
+            
+            if (userProfile.name && userProfile.payrollNumber) {
+                // Show display, hide input
+                document.getElementById('display-userName').textContent = userProfile.name;
+                document.getElementById('display-payrollNumber').textContent = userProfile.payrollNumber;
+                document.getElementById('display-userEmail').textContent = userProfile.userEmail; 
+                // NEW: Display contracted hours
+                document.getElementById('display-contractedHours').textContent = `${userProfile.contractedHours} Hours`;
+                // NEW: Display device and browser info
+                document.getElementById('device-info').textContent = detectDeviceAndBrowser();
+				
+                displaySection.classList.remove('hidden');
+                inputSection.classList.add('hidden');
+            } else {
+                // Show input, hide display
+                inputSection.classList.remove('hidden');
+                displaySection.classList.add('hidden');
+            }
+        }
+        
+        window.checkCustomContractedHours = function() {
+            const select = document.getElementById('contractedHoursSelect');
+            const customContainer = document.getElementById('customHoursInputContainer');
+            if (select.value === 'custom') {
+                customContainer.classList.remove('hidden');
+            } else {
+                customContainer.classList.add('hidden');
+            }
+        }
+
+        window.editProfile = function() {
+            // Restore current values to inputs before showing
+            document.getElementById('userName').value = userProfile.name || '';
+            document.getElementById('payrollNumber').value = userProfile.payrollNumber || '';
+            document.getElementById('userEmail').value = userProfile.userEmail || '';
+            
+            // NEW: Set contracted hours back to inputs for editing
+            const hours = userProfile.contractedHours;
+            const select = document.getElementById('contractedHoursSelect');
+            const customInput = document.getElementById('customContractedHours');
+            const customContainer = document.getElementById('customHoursInputContainer');
+            
+            const options = Array.from(select.options).map(opt => opt.value);
+            if (options.includes(String(hours))) {
+                select.value = String(hours);
+                customContainer.classList.add('hidden');
+            } else {
+                select.value = 'custom';
+                customInput.value = hours;
+                customContainer.classList.remove('hidden');
+            }
+            
+            document.getElementById('profile-input-section').classList.remove('hidden');
+            document.getElementById('displayed-profile-section').classList.add('hidden');
+        }
+
+		// --- PRINT SCALE MANAGEMENT ---
+
+/**
+ * @description Updates the global print scale factor and saves it to local storage.
+ */
+window.changePrintScale = function() {
+    const scaleInput = document.getElementById('current-print-scale');
+    let newScalePercent = parseInt(scaleInput.value, 10);
+
+    if (isNaN(newScalePercent) || newScalePercent < 10 || newScalePercent > 200) {
+        alert("Please enter a valid percentage between 10 and 200.");
+        scaleInput.value = (PRINT_SCALE_FACTOR * 100).toFixed(0); // Reset to current value
+        return;
+    }
+
+    // Convert percentage (e.g., 73) to a factor (0.73)
+    PRINT_SCALE_FACTOR = newScalePercent / 100;
+    
+    // Save the new factor to Local Storage
+    localStorage.setItem('printScaleFactor', PRINT_SCALE_FACTOR.toFixed(2));
+    
+    alert(`Print scale set to ${newScalePercent}%. This will be used when generating the PDF report.`);
+
+    // Hide the input and show the button again (optional, depending on final UX)
+    // For simplicity, we keep the input visible as a persistent setting.
+}
+/**
+ * @description Resets the print scale to the device-specific default.
+ */
+window.resetPrintScale = function() {
+    const defaultScale = isAppleDevice ? APPLE_SCALE : DEFAULT_SCALE;
+    
+    PRINT_SCALE_FACTOR = defaultScale;
+    localStorage.removeItem('printScaleFactor'); // Remove custom setting
+    
+    const scaleInput = document.getElementById('current-print-scale');
+    scaleInput.value = (defaultScale * 100).toFixed(0);
+
+    alert(`Print scale reset to the default of ${(defaultScale * 100).toFixed(0)}% for your device.`);
+}
+
+		
+        function saveProfile() {
+            const name = document.getElementById('userName').value.trim();
+            const payrollNumber = document.getElementById('payrollNumber').value.trim();
+            let userEmail = document.getElementById('userEmail').value.trim();
+            
+            // NEW: Get contracted hours value
+            const contractedHoursSelect = document.getElementById('contractedHoursSelect').value;
+            let contractedHours;
+
+            if (contractedHoursSelect === 'custom') {
+                contractedHours = parseFloat(document.getElementById('customContractedHours').value);
+                if (isNaN(contractedHours) || contractedHours <= 0) {
+                     showMessageBox("Error", "Please enter a valid custom contracted hours value.", true);
+                    return;
+                }
+            } else {
+                contractedHours = parseFloat(contractedHoursSelect);
+            }
+
+            if (!name || !payrollNumber) {
+                showMessageBox("Error", "Please enter both Name and Payroll Number.", true);
+                return;
+            }
+
+            // Enforce default email if left empty
+            if (!userEmail) {
+                userEmail = 'username@email.com';
+            }
+
+            // UPDATED: Save new contractedHours field
+            userProfile = { name, payrollNumber, userEmail, contractedHours };
+            try {
+                localStorage.setItem(PROFILE_KEY, JSON.stringify(userProfile));
+                showMessageBox("Success", "Profile details saved successfully!", true);
+                updateProfileDisplay(); // Update the display immediately
+            } catch (error) {
+                console.error("Error saving profile:", error);
+                showMessageBox("Error", "Failed to save profile data locally.", true);
+            }
+        }
+
+        function saveShiftsToLocalStorage() {
+            try {
+                localStorage.setItem(SHIFTS_KEY, JSON.stringify(userShifts));
+            } catch (error) {
+                console.error("Error saving shifts:", error);
+            }
+            renderCalendar();
+        }
+
+        /**
+         * @description Clears all shifts for the currently displayed month.
+         */
+        window.clearAllShifts = function() {
+            const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            const shiftsToDelete = Object.keys(userShifts).filter(dateStr => dateStr.startsWith(yearMonthPrefix));
+
+            if (shiftsToDelete.length === 0) {
+                showMessageBox("Info", `No shifts found for ${monthName} to clear.`, true);
+                return;
+            }
+
+            if (confirm(`⚠️ WARNING: This will permanently delete ALL ${shiftsToDelete.length} recorded shifts for ${monthName} from your browser's local storage. Are you sure you want to proceed?`)) {
+                
+                // Remove shifts belonging to the current month
+                shiftsToDelete.forEach(dateStr => {
+                    delete userShifts[dateStr];
+                });
+
+                saveShiftsToLocalStorage(); // Save the updated object to localStorage
+                showMessageBox("Success", `${shiftsToDelete.length} shifts for ${monthName} have been cleared.`, true);
+            }
+        }
+
+        // --- SHIFT UI FUNCTIONS ---
+
+        function showShiftModal(date) {
+            selectedDate = date;
+            const dateObj = new Date(date);
+            document.getElementById('modal-date-display').textContent = `Shift Details for ${dateObj.toDateString()}`;
+            const deleteBtn = document.getElementById('delete-shift-btn');
+
+            const shiftData = userShifts[date] || {};
+
+            // Manage the delete button visibility
+            if (Object.keys(shiftData).length > 0) {
+                deleteBtn.classList.remove('hidden');
+            } else {
+                deleteBtn.classList.add('hidden');
+            }
+
+            // Set form defaults based on existing data or base shift
+            const defaultShiftType = shiftData.shiftType || 'Standard';
+            const radioButtons = document.querySelectorAll('input[name="shiftType"]');
+            radioButtons.forEach(radio => {
+                radio.checked = radio.value === defaultShiftType;
+            });
+
+            document.getElementById('startTime').value = shiftData.startTime || '07:20';
+            document.getElementById('finishTime').value = shiftData.finishTime || '20:30';
+            document.getElementById('breaksCount').value = shiftData.breaksCount !== undefined ? String(shiftData.breaksCount) : '2';
+
+            // Initial calculations and UI state updates
+            calculateEnhancements(shiftData);
+
+            document.getElementById('shift-modal').classList.remove('hidden');
+        }
+
+        function closeShiftModal() {
+            document.getElementById('shift-modal').classList.add('hidden');
+            selectedDate = null;
+        }
+        
+        function closeReportModal() {
+            document.getElementById('report-modal').classList.add('hidden');
+        }
+
+        // --- SHIFT CALCULATION LOGIC ---
+
+        function calculateEnhancements(initialShiftData = {}) {
+            if (!selectedDate) return;
+
+            // --- PERSIST CURRENT DROPDOWN VALUES BEFORE RECALCULATION/RE-RENDER ---
+            const currentSelections = {};
+            currentSelections.earlyStartEnhancement = document.getElementById('earlyStartEnhancement')?.value;
+            currentSelections.lateFinishEnhancement = document.getElementById('lateFinishEnhancement')?.value;
+            currentSelections.lateStartAdjustment = document.getElementById('lateStartAdjustment')?.value;
+            currentSelections.earlyFinishAdjustment = document.getElementById('earlyFinishAdjustment')?.value;
+
+            const deviationData = {
+                earlyStartEnhancement: currentSelections.earlyStartEnhancement || initialShiftData.earlyStartEnhancement || 'Toil',
+                lateFinishEnhancement: currentSelections.lateFinishEnhancement || initialShiftData.lateFinishEnhancement || 'Toil',
+                lateStartAdjustment: currentSelections.lateStartAdjustment || initialShiftData.lateStartAdjustment || 'Neg Toil',
+                earlyFinishAdjustment: currentSelections.earlyFinishAdjustment || initialShiftData.earlyFinishAdjustment || 'Neg Toil',
+            };
+            // --------------------------------------------------------------------------
+
+            const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+            const startTimeStr = document.getElementById('startTime').value;
+            const finishTimeStr = document.getElementById('finishTime').value;
+            const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+
+            const startMinutes = timeToMinutes(startTimeStr);
+            const finishMinutes = timeToMinutes(finishTimeStr);
+
+            // Break visibility logic
+            const breakSection = document.getElementById('breaks-section');
+            if (startMinutes > timeToMinutes('13:00') || finishMinutes < timeToMinutes('18:00')) {
+                breakSection.classList.remove('hidden');
+            } else {
+                breakSection.classList.add('hidden');
+                document.getElementById('breaksCount').value = '2'; // Auto-reset breaks to 2
+            }
+
+            const totalBreaksMinutes = breaksCount * 20;
+            // Calculate total shift minutes, handling shifts that cross midnight
+            let totalShiftMinutes = finishMinutes > startMinutes ? finishMinutes - startMinutes : (1440 - startMinutes) + finishMinutes;
+
+            // --- Primary Calculations ---
+            const enhancements = {
+                // Time worked *before* 07:20
+                earlyStartMinutes: Math.max(0, DEFAULT_START_TIME_MINUTES - startMinutes),
+                // Time *not* worked *after* 07:20 (a deficit)
+                lateStartMinutes: Math.max(0, startMinutes - DEFAULT_START_TIME_MINUTES),
+                // Time *not* worked *before* 20:30 (a deficit)
+                earlyFinishMinutes: Math.max(0, DEFAULT_END_TIME_MINUTES - finishMinutes),
+                // Time worked *after* 20:30 (an excess)
+                extraTimeWorkedMinutes: Math.max(0, finishMinutes - DEFAULT_END_TIME_MINUTES),
+
+                nightDuty: 0,
+                weekendEnhancement: 0,
+                bankHolidayEnhancement: 0,
+                totalPaidMinutes: Math.max(0, totalShiftMinutes - totalBreaksMinutes),
+            };
+
+            const date = new Date(selectedDate);
+            const dayOfWeek = date.getDay(); // 0=Sun, 6=Sat
+
+            const isStandardType = shiftType === 'Standard' || shiftType === 'Bank Holiday';
+            const isOvertimeType = shiftType === 'Overtime' || shiftType === 'Bank Holiday Overtime';
+
+
+            // --- 1. Night Duty Calculation (20:00 to 20:30, applies to Standard and Bank Holiday Standard) ---
+            if (isStandardType && dayOfWeek >= 1 && dayOfWeek <= 5) {
+                const ndStart = Math.max(startMinutes, NIGHT_DUTY_START_MINUTES);
+                const ndEnd = Math.min(finishMinutes, NIGHT_DUTY_END_MINUTES);
+
+                if (ndEnd > ndStart) {
+                    enhancements.nightDuty = ndEnd - ndStart;
+                }
+            }
+
+
+            // --- 2. Weekend/Bank Holiday Enhancement (Total shift paid minutes) ---
+            if (shiftType === 'Bank Holiday') {
+                enhancements.bankHolidayEnhancement = enhancements.totalPaidMinutes;
+            } else if (shiftType === 'Standard') {
+                if (dayOfWeek === 0 || dayOfWeek === 6) {
+                    enhancements.weekendEnhancement = enhancements.totalPaidMinutes;
+                }
+            }
+
+            // --- 3. Dynamic Selector Generation & Overtime Handling ---
+            const selectorContainer = document.getElementById('deviation-selectors');
+            selectorContainer.innerHTML = '<p class="font-bold text-lg mb-2 text-yellow-800">Time Deviation Management</p>';
+            const deviationText = [];
+
+            if (isStandardType) {
+                // Early Start
+                if (enhancements.earlyStartMinutes > 0) {
+                    const minutes = enhancements.earlyStartMinutes;
+                    deviationText.push(`• Early Start: ${formatHours(minutes)} hrs`);
+                    selectorContainer.innerHTML += generateSelector(
+                        'earlyStartEnhancement',
+                        `Early Start (${formatHours(minutes)} hrs):`,
+                        [
+                            { value: 'Toil', label: '1. Toil for early start' },
+                            { value: 'Overtime', label: '2. Overtime for early start' },
+                            { value: 'None', label: '3. No recorded enhancement' },
+                        ],
+                        deviationData.earlyStartEnhancement
+                    );
+                }
+
+                // Extra Time Worked (Post 20:30)
+                if (enhancements.extraTimeWorkedMinutes > 0) {
+                    const minutes = enhancements.extraTimeWorkedMinutes;
+                    deviationText.push(`• Extra Time Worked (Post 20:30): ${formatHours(minutes)} hrs`);
+                    selectorContainer.innerHTML += generateSelector(
+                        'lateFinishEnhancement',
+                        `Extra Time Worked (${formatHours(minutes)} hrs):`,
+                        [
+                            { value: 'Toil', label: '1. Record as Toil' },
+                            { value: 'Overtime', label: '2. Record as Overtime' },
+                        ],
+                        deviationData.lateFinishEnhancement
+                    );
+                }
+
+                // Late Start
+                if (enhancements.lateStartMinutes > 0) {
+                    const minutes = enhancements.lateStartMinutes;
+                    deviationText.push(`• Late Start: -${formatHours(minutes)} hrs`);
+                    selectorContainer.innerHTML += generateSelector(
+                        'lateStartAdjustment',
+                        `Late Start (${formatHours(minutes)} hrs):`,
+                        [
+                            { value: 'Neg Toil', label: '1. Late start for negative toil' },
+                            { value: 'AL', label: '2. Late start for annual leave' },
+                        ],
+                        deviationData.lateStartAdjustment
+                    );
+                }
+
+                // Early Finish
+                if (enhancements.earlyFinishMinutes > 0) {
+                    const minutes = enhancements.earlyFinishMinutes;
+                    deviationText.push(`• Early Finish (Pre 20:30): -${formatHours(minutes)} hrs`);
+                    selectorContainer.innerHTML += generateSelector(
+                        'earlyFinishAdjustment',
+                        `Early Finish (${formatHours(minutes)} hrs):`,
+                        [
+                            { value: 'Neg Toil', label: '1. Early finish for negative toil' },
+                            { value: 'AL', label: '2. Early finish for annual leave' },
+                        ],
+                        deviationData.earlyFinishAdjustment
+                    );
+                }
+
+            } else if (isOvertimeType) {
+                selectorContainer.innerHTML = `<p class="text-sm font-medium ${shiftType.includes('Bank') ? 'text-purple-700' : 'text-red-700'}">All ${formatHours(enhancements.totalPaidMinutes)} hours in this shift are recorded as Overtime.</p>`;
+                enhancements.extraTimeWorkedMinutes = 0;
+            }
+
+            // Hide the main deviation container if no deviations occurred
+            if (selectorContainer.children.length === 1 && deviationText.length === 0) {
+                selectorContainer.classList.add('hidden');
+            } else {
+                 selectorContainer.classList.remove('hidden');
+            }
+
+            // --- 4. Display Results ---
+            const display = document.getElementById('enhancement-display');
+            display.innerHTML = '';
+
+            const paidHours = formatHours(enhancements.totalPaidMinutes);
+            display.innerHTML += `<p class="font-bold">Total Paid Work Time: ${paidHours} hrs</p>`;
+            display.innerHTML += `<p class="font-bold">Unpaid Breaks: ${totalBreaksMinutes} mins (${breaksCount} x 20m)</p>`;
+            display.innerHTML += `<hr class="my-2 border-indigo-300">`;
+
+            if (enhancements.nightDuty > 0) {
+                display.innerHTML += `<p class="font-bold text-purple-700">• Night Duty: ${formatHours(enhancements.nightDuty)} hrs (Capped 20:00 - 20:30)</p>`;
+            }
+            if (enhancements.bankHolidayEnhancement > 0) {
+                display.innerHTML += `<p class="font-bold text-red-700">• Bank Holiday Enhancement: ${formatHours(enhancements.bankHolidayEnhancement)} hrs</p>`;
+            }
+            if (enhancements.weekendEnhancement > 0) {
+                display.innerHTML += `<p class="font-bold text-blue-700">• Weekend Enhancement: ${formatHours(enhancements.weekendEnhancement)} hrs</p>`;
+            }
+
+            if (enhancements.extraTimeWorkedMinutes > 0 && isStandardType) {
+                display.innerHTML += `<p class="font-bold text-orange-700">• Extra Time Worked (Post 20:30): ${formatHours(enhancements.extraTimeWorkedMinutes)} hrs</p>`;
+            }
+
+            if (isStandardType && deviationText.length > 0) {
+                display.innerHTML += `<p class="font-bold mt-2">Time Adjustments (Based on selection above):</p>`;
+                deviationText.forEach(text => {
+                    display.innerHTML += `<p class="ml-2 text-sm">${text}</p>`;
+                });
+            } else if (isOvertimeType) {
+                 display.innerHTML += `<p class="font-bold text-red-700">• ALL ${paidHours} hrs recorded as Overtime.</p>`;
+            }
+
+            const calculatedData = {
+                ...enhancements,
+                ...deviationData // Include deviation choices for saving
+            };
+            document.getElementById('shift-form').dataset.calculated = JSON.stringify(calculatedData);
+        }
+
+        function generateSelector(id, label, options, defaultValue) {
+            let optionsHtml = options.map(opt =>
+                `<option value="${opt.value}" ${opt.value === defaultValue ? 'selected' : ''}>${opt.label}</option>`
+            ).join('');
+
+            return `
+                <div>
+                    <label for="${id}" class="block text-sm font-medium text-gray-700">${label}</label>
+                    <select id="${id}" name="${id}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                        ${optionsHtml}
+                    </select>
+                </div>
+            `;
+        }
+
+        // --- SHIFT DATA HANDLING (LOCAL SAVE/DELETE) ---
+
+        window.handleSaveShift = async function(event) {
+            event.preventDefault();
+
+            if (!selectedDate || !userProfile.name) {
+                showMessageBox("Error", "Please select a date and save your profile (Name and Payroll No.) first.", true);
+                return;
+            }
+
+            const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+            const startTime = document.getElementById('startTime').value;
+            const finishTime = document.getElementById('finishTime').value;
+            const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+            const calculatedData = JSON.parse(document.getElementById('shift-form').dataset.calculated || '{}');
+
+            // The calculatedData now includes deviation selectors via the calculateEnhancements function
+
+            const newShift = {
+                shiftType,
+                startTime,
+                finishTime,
+                breaksCount,
+                ...calculatedData,
+                userName: userProfile.name,
+                payrollNumber: userProfile.payrollNumber,
+                userEmail: userProfile.userEmail, 
+                date: selectedDate,
+                // NEW: Include contractedHours in the shift record (for future reporting/calculation flexibility)
+                contractedHours: userProfile.contractedHours,
+            };
+
+            // Update local state and save to localStorage
+            userShifts[selectedDate] = newShift;
+            saveShiftsToLocalStorage();
+            
+            closeShiftModal();
+        }
+        document.getElementById('shift-form').onsubmit = window.handleSaveShift;
+
+
+        window.deleteShift = function() {
+            if (!selectedDate) {
+                showMessageBox("Error", "Cannot delete: Date is missing.", true);
+                return;
+            }
+
+            // Remove from local state
+            delete userShifts[selectedDate];
+
+            // Save updated state to localStorage
+            saveShiftsToLocalStorage();
+
+            closeShiftModal();
+        }
+        
+        // --- REPORT GENERATION LOGIC ---
+        
+        window.generateReport = function() {
+            // Note: The logic in this function primarily calculates the totals needed for the report
+            // The display logic for the modal itself is less relevant now as the printReport function
+            // dictates the final output structure. We retain this for the modal display and calculation cache.
+
+            const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            document.getElementById('report-title').textContent = `Monthly Shift Report for ${monthName}`;
+            
+            // Updated Report Period Display
+            document.getElementById('report-period').innerHTML = `
+                <p>User: <strong>${userProfile.name || 'N/A'}</strong> | Payroll No: <strong>${userProfile.payrollNumber || 'N/A'}</strong></p>
+                <p>Email: <strong>${userProfile.userEmail || 'N/A'}</strong> | Contracted: <strong>${userProfile.contractedHours || 'N/A'} Hours</strong></p>
+            `;
+            
+            const totals = {
+                nightDuty: 0,
+                satShifts: 0, // Standard Sat shifts (total paid minutes)
+                sunShifts: 0, // Standard Sun shifts (total paid minutes)
+                extraHoursWorked: 0, // Post 20:30 - before deviation logic
+                otMonFri: 0, 
+                otSat: 0,
+                otSun: 0,
+                otBH: 0,
+                toilAccrued: 0,
+                toilUsed: 0, // Negative Toil
+                annualLeaveUsed: 0,
+            };
+            
+            const shiftsInMonth = [];
+
+            // --- Shift Processing Loop for Totals and Print Detail ---
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const shift = userShifts[dateStr];
+                
+                // Create a base shift object for print form, even if no shift exists (empty row)
+                const baseShift = {
+                    date: dateStr,
+                    dayOfMonth: day,
+                    shiftType: shift ? shift.shiftType : 'None',
+                    startTime: shift ? shift.startTime : '',
+                    finishTime: shift ? shift.finishTime : '',
+                    
+                    // Unsocial Hours Enhancements
+                    uhSat: 0,
+                    uhSun: 0,
+                    uhNight: 0,
+                    uhBH: 0,
+                    
+                    // Extra Hours/OT
+                    extraHours: 0, // Time worked over 12.5 hrs default shift
+                    otMonFri: 0,
+                    otSat: 0,
+                    otSun: 0,
+                    otBH: 0,
+                };
+                
+                if (shift) {
+                    const date = new Date(dateStr);
+                    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+/////////////////// baseShift.totalPaidMinutes = shift.totalPaidMinutes || 0;
+		    baseShift.totalPaidMinutes = shift.totalPaidMinutes || 0;
+
+                    const totalPaidMinutes = shift.totalPaidMinutes || 0;
+                    
+                    // 1. Core Enhancements (Totals)
+                    totals.nightDuty += shift.nightDuty || 0;
+                    
+                    // 2. Unsocial Hours (UH) Logic (based on totalPaidMinutes for Standard/BH shifts)
+                    if (shift.shiftType === 'Bank Holiday') {
+                        baseShift.uhBH = totalPaidMinutes;
+                        totals.bankHolidayEnhancement += totalPaidMinutes; // Retain existing total for modal display
+                    } else if (shift.shiftType === 'Standard') {
+                        if (dayOfWeek === 6) { // Saturday
+                            baseShift.uhSat = totalPaidMinutes;
+                            totals.satShifts += totalPaidMinutes;
+                        } else if (dayOfWeek === 0) { // Sunday
+                            baseShift.uhSun = totalPaidMinutes;
+                            totals.sunShifts += totalPaidMinutes;
+                        }
+                        
+                        // Night Duty is a fixed enhancement within the shift
+                        baseShift.uhNight = shift.nightDuty || 0;
+
+                        // 3. Deviation Totals/Extra Hours (Standard Shifts only)
+                        
+                        // Extra Hours (Post 20:30) - Time worked beyond the default shift end
+                        baseShift.extraHours = shift.extraTimeWorkedMinutes || 0;
+                        totals.extraHoursWorked += shift.extraTimeWorkedMinutes || 0;
+                        
+                        // Overtime from Deviation
+                        if (shift.earlyStartEnhancement === 'Overtime' || shift.lateFinishEnhancement === 'Overtime') {
+                            let otMinutes = 0;
+                            if (shift.earlyStartEnhancement === 'Overtime') { otMinutes += shift.earlyStartMinutes || 0; }
+                            if (shift.lateFinishEnhancement === 'Overtime') { otMinutes += shift.extraTimeWorkedMinutes || 0; }
+                            
+                            if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Mon-Fri
+                                baseShift.otMonFri = otMinutes;
+                                totals.otMonFri += otMinutes;
+                            } else if (dayOfWeek === 6) { // Sat
+                                baseShift.otSat = otMinutes;
+                                totals.otSat += otMinutes;
+                            } else if (dayOfWeek === 0) { // Sun
+                                baseShift.otSun = otMinutes;
+                                totals.otSun += otMinutes;
+                            }
+                        }
+
+                        // Toil/AL calculations (for totals only, not printed in the table)
+                        if (shift.earlyStartEnhancement === 'Toil') { totals.toilAccrued += shift.earlyStartMinutes || 0; }
+                        if (shift.lateFinishEnhancement === 'Toil') { totals.toilAccrued += shift.extraTimeWorkedMinutes || 0; }
+                        if (shift.lateStartAdjustment === 'Neg Toil') { totals.toilUsed += shift.lateStartMinutes || 0; }
+                        if (shift.earlyFinishAdjustment === 'Neg Toil') { totals.toilUsed += shift.earlyFinishMinutes || 0; }
+                        if (shift.lateStartAdjustment === 'AL') { totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
+                        if (shift.earlyFinishAdjustment === 'AL') { totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+                        
+                    } else if (shift.shiftType === 'Overtime') {
+                        // General Overtime (The entire shift)
+                         if (dayOfWeek >= 1 && dayOfWeek <= 5) { // Mon-Fri
+                            baseShift.otMonFri = totalPaidMinutes;
+                            totals.otMonFri += totalPaidMinutes;
+                        } else if (dayOfWeek === 6) { // Sat
+                            baseShift.otSat = totalPaidMinutes;
+                            totals.otSat += totalPaidMinutes;
+                        } else if (dayOfWeek === 0) { // Sun
+                            baseShift.otSun = totalPaidMinutes;
+                            totals.otSun += totalPaidMinutes;
+                        }
+                    } else if (shift.shiftType === 'Bank Holiday Overtime') {
+                        // Bank Holiday Overtime (The entire shift)
+                        baseShift.otBH = totalPaidMinutes;
+                        totals.otBH += totalPaidMinutes;
+                    }
+                } // End if (shift)
+                
+                shiftsInMonth.push(baseShift);
+            } // End day loop
+            
+            // Cache the report data before displaying/printing
+            currentReportData = { totals, shiftsInMonth, monthName };
+
+            // --- Generate Modal Display (Existing logic - kept for UI) ---
+            const reportBody = document.getElementById('report-table-body');
+            reportBody.innerHTML = '';
+            
+            const reportData = [
+                { label: 'Night Duty Hours (20:00 - 20:30)', value: totals.nightDuty, color: 'text-purple-700', description: 'Enhancement for working 20:00-20:30 Mon-Fri.' },
+                { label: 'Standard Sat Shifts (Total Paid)', value: totals.satShifts, color: 'text-blue-700', description: 'Total paid hours for shifts recorded as "Standard" on Saturdays.' },
+                { label: 'Standard Sun Shifts (Total Paid)', value: totals.sunShifts, color: 'text-blue-700', description: 'Total paid hours for shifts recorded as "Standard" on Sundays.' },
+                { label: '---', value: 0, isDivider: true },
+                { label: 'Overtime Mon-Fri (Incl. Deviation)', value: totals.otMonFri, color: 'text-red-700', description: 'Total hours recorded as Overtime (Shift or Deviation) Mon-Fri.' },
+                { label: 'Overtime Saturday (Incl. Deviation)', value: totals.otSat, color: 'text-red-700', description: 'Total hours recorded as Overtime (Shift or Deviation) on Saturday.' },
+                { label: 'Overtime Sunday (Incl. Deviation)', value: totals.otSun, color: 'text-red-700', description: 'Total hours recorded as Overtime (Shift or Deviation) on Sunday.' },
+                { label: 'Bank Holiday Overtime (Total Paid)', value: totals.otBH, color: 'text-pink-700', description: 'Total paid hours for shifts recorded as "Bank Holiday Overtime."' },
+                { label: 'Extra Time Worked (Post 20:30 raw)', value: totals.extraHoursWorked, color: 'text-orange-700', description: 'Total minutes worked after 20:30 before assignment to TOIL/OT.' },
+                { label: '---', value: 0, isDivider: true },
+                { label: 'TOIL Accrued (+ Hours)', value: totals.toilAccrued, color: 'text-green-700', description: 'Hours gained from early start/late finish assigned to TOIL.' },
+                { label: 'TOIL Used (- Hours)', value: totals.toilUsed, color: 'text-red-600', description: 'Hours deducted from TOIL for late start/early finish.' },
+                { label: 'Annual Leave Used (- Hours)', value: totals.annualLeaveUsed, color: 'text-red-600', description: 'Hours deducted from AL for late start/early finish.' },
+            ];
+            
+            reportData.forEach(item => {
+                if (item.isDivider) {
+                    reportBody.innerHTML += `<tr><td colspan="3" class="h-4 border-b-2 border-gray-300"></td></tr>`;
+                    return;
+                }
+                reportBody.innerHTML += `
+                    <tr>
+                        <td class="py-2 px-2 text-sm font-medium ${item.color}">${item.label}</td>
+                        <td class="py-2 px-2 text-sm font-bold text-right ${item.color}">${formatHours(item.value)}</td>
+                        <td class="py-2 px-2 text-xs text-gray-500 hidden sm:table-cell">${item.description}</td>
+                    </tr>
+                `;
+            });
+            
+            // --- 2. Generate Detailed Shift List (Kept for UI) ---
+            const detailedList = document.getElementById('detailed-shift-list');
+            detailedList.innerHTML = '';
+            
+            const loggedShifts = shiftsInMonth.filter(shift => shift.shiftType !== 'None');
+
+            if (loggedShifts.length === 0) {
+                detailedList.innerHTML = '<p class="text-gray-500 italic">No shifts logged for this month.</p>';
+            } else {
+                loggedShifts.forEach(shift => {
+                    const dateObj = new Date(shift.date);
+                    const dayOfWeek = dateObj.toLocaleDateString('en-US', { weekday: 'short' });
+                    
+                    let toilChange = 0;
+                    let overtimeChange = 0;
+                    
+                    // Calculate Toil/Overtime/AL change for Standard shifts
+                    if (shift.shiftType === 'Standard') {
+                        // Toil Accrued (Positive)
+                        if (shift.earlyStartEnhancement === 'Toil') { toilChange += shift.earlyStartMinutes || 0; }
+                        if (shift.lateFinishEnhancement === 'Toil') { toilChange += shift.extraTimeWorkedMinutes || 0; }
+                        
+                        // Toil Used (Negative)
+                        if (shift.lateStartAdjustment === 'Neg Toil') { toilChange -= shift.lateStartMinutes || 0; }
+                        if (shift.earlyFinishAdjustment === 'Neg Toil') { toilChange -= shift.earlyFinishMinutes || 0; }
+                        
+                        // Overtime
+                        if (shift.earlyStartEnhancement === 'Overtime') { overtimeChange += shift.earlyStartMinutes || 0; }
+                        if (shift.lateFinishEnhancement === 'Overtime') { overtimeChange += shift.extraTimeWorkedMinutes || 0; }
+                    } else if (shift.shiftType.includes('Overtime')) {
+                        overtimeChange += shift.totalPaidMinutes || 0;
+                    }
+                    
+                    const toilText = toilChange !== 0 
+                        ? `<span class="${toilChange > 0 ? 'text-green-600' : 'text-red-600'} font-bold">Toil: ${formatHours(toilChange)} hrs</span>`
+                        : '';
+                    
+                    const otText = overtimeChange > 0 
+                        ? `<span class="text-red-600 font-bold">OT: ${formatHours(overtimeChange)} hrs</span>`
+                        : '';
+
+                    const paidHoursText = `<span class="font-bold">Paid: ${formatHours(shift.totalPaidMinutes)} hrs</span>`;
+                    
+                    const enhancements = [];
+                    if (shift.nightDuty > 0) enhancements.push('Night Duty');
+                    if (shift.weekendEnhancement > 0 && shift.shiftType === 'Standard') enhancements.push('Weekend Hrs');
+                    if (shift.bankHolidayEnhancement > 0 && shift.shiftType === 'Bank Holiday') enhancements.push('BH Hrs');
+
+                    detailedList.innerHTML += `
+    <div class="p-3 rounded-xl border border-gray-300 bg-white shadow-sm">
+        <p class="font-bold text-base text-gray-800">${dateObj.toDateString()} (${dayOfWeek})</p>
+        <p class="text-xs text-gray-600">
+            <strong>${shift.shiftType}</strong>: ${shift.startTime} - ${shift.finishTime} (${shift.breaksCount} breaks)
+        </p>
+        <div class="mt-1 text-xs space-x-3">
+            ${paidHoursText}
+            ${toilText}
+            ${otText}
+            ${enhancements.length > 0 ? `<span class="text-purple-600">${enhancements.join(', ')}</span>` : ''}
+        </div>
+    </div>
+`;
+                });
+            }
+
+            document.getElementById('report-modal').classList.remove('hidden');
+        }
+        
+        // --- PRINT REPORT FUNCTION (CORRECTED) ---
+        window.printReport = function() {
+            const { shiftsInMonth, monthName } = currentReportData;
+            const profile = userProfile;
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            if (!monthName) {
+                alert("Please generate the report first before attempting to print.");
+                return;
+            }
+
+			// NEW CODE START: Use the constant PRINT_SCALE_FACTOR to set the CSS
+  			// Generate the CSS string dynamically using the calculated factor (e.g., 0.73 or 1.0)
+    		const printScaleCss = `
+    		@media print {
+        	body {
+            	/* Apply the calculated scale factor (e.g., scale(0.73) or scale(1.0)) */
+           	 transform: scale(${PRINT_SCALE_FACTOR});
+           	 transform-origin: top left;
+            	margin: 0;
+            	padding: 0;
+        }
+    }
+`;
+    // NEW CODE END
+			
+            // Re-calculate Grand Totals for the 13 columns (using cached data)
+            const grandTotals = shiftsInMonth.reduce((acc, shift) => {
+                acc.uhSat += shift.uhSat || 0;
+                acc.uhSun += shift.uhSun || 0;
+                acc.uhNight += shift.uhNight || 0;
+                acc.uhBH += shift.uhBH || 0;
+                acc.extraHours += shift.extraHours || 0;
+                acc.otMonFri += shift.otMonFri || 0;
+                acc.otSat += shift.otSat || 0;
+                acc.otSun += shift.otSun || 0;
+                acc.otBH += shift.otBH || 0;
+                return acc;
+            }, {
+                uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0, extraHours: 0,
+                otMonFri: 0, otSat: 0, otSun: 0, otBH: 0
+            });
+
+            // 1. Build Table Rows - **UPDATED HERE**
+            let tableRowsHtml = shiftsInMonth.map(shift => {
+                const date = new Date(shift.date);
+                const day = date.getDate();
+				
+		const dayName = shift.shiftType !== 'None' ? dayNames[date.getDay()] : '';
+                //const dayName = dayNames[date.getDay()];
+                
+                // Determine if a row should be colored as a weekend for visibility
+                const isWeekend = date.getDay() === 0 || date.getDay() === 6; // Keep for border/style changes later if needed
+
+                return `
+                    <tr style="height: 1.25em;">
+                        <td style="width: 5%; padding: 2px; text-align: center; background-color: #ddd; border-left: 1px solid #000; border-right: 1px dashed #ccc; border-bottom: 1px dashed #ccc;">${day}</td>
+                        <td style="width: 5%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${dayName}</td>
+                        
+                        <td style="width: 8%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${shift.startTime}</td>
+                        <td style="width: 8%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${shift.finishTime}</td>
+                        
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.uhSat)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.uhSun)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.uhNight)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.uhBH)}</td>
+                        
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.extraHours)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.otMonFri)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.otSat)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.otSun)}</td>
+                        <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc;">${formatHoursForPrint(shift.otBH)}</td>
+                        
+                    </tr>
+                `;
+            }).join('');
+
+            // 2. Build Totals Row - **UPDATED HERE** (colspan reduced to 4)
+            const totalsRowHtml = `
+                <tr style="font-weight: bold; ">
+                    <td colspan="4" style="padding: 5px; text-align: right; border: 1px solid #000;">TOTAL number of hours:  </td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.uhSat)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.uhSun)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.uhNight)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.uhBH)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.extraHours)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.otMonFri)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.otSat)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.otSun)}</td>
+                    <td style="padding: 5px; text-align: center; border: 1px solid #000;">${formatHoursForPrint(grandTotals.otBH)}</td>
+                 
+                </tr>
+            `;
+
+            // 3. Assemble Final Print HTML (A4 Portrait Style) - **UPDATED HEADERS**
+            const printContent = `
+                <html>
+                    <head>
+                        <title>UNSOCIAL HOURS & OVERTIME CLAIM FORM - ${monthName}</title>
+                   <style>
+
+//////////////// ===========================				   
+				   ${printScaleCss} /* INJECT THE DYNAMIC PRINT SCALE CSS */
+//////////////// ===========================
+
+    /* A4 Portrait specific styles */
+    @page { size: A4 portrait; margin: 15mm; }
+    body { 
+        font-family: Arial, sans-serif; 
+        font-size: 9pt; 
+        color: #333; 
+        margin: 0; 
+        padding: 0;
+    }
+    
+    /* === FIX: Ensure Background Colors Print === */
+    th, td {
+        -webkit-print-color-adjust: exact;
+        color-adjust: exact;
+    }
+    /* ========================================= */
+
+    .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .header-row img { max-width: 150px; height: auto; }
+    h1 { font-size: 1.2em; font-weight: bold; text-align: center; margin-bottom: 10px; }
+    .details { margin-bottom: 10px; line-height: 1.4; }
+    .sub-heading { font-weight: bold; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
+    .instructions { margin-left: 10px; margin-bottom: 15px; font-size: 0.9em; }
+    .instructions li { margin-bottom: 5px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.8em; }
+    
+    /* General TH styles are here */
+    th { 
+        background-color: #ddd; /* Using #ddd for headers as a default light grey */
+        font-weight: bold; 
+        padding: 4px 2px; 
+        border: 1px solid #000; 
+        text-align: center; 
+        vertical-align: middle; 
+        line-height: 1.1; 
+    }
+    /* General TD styles */
+    td { 
+        border-right: 1px solid #000; 
+        border-left: 1px solid #000; 
+        padding: 2px; 
+    }
+    .footer-section { display: flex; justify-content: space-between; margin-top: 30px; font-size: 0.9em; }
+    .signature-box { border-top: 1px solid #000; padding-top: 5px; width: 30%; }
+    .fill-line { border-bottom: 1px solid #000; padding-bottom: 2px; margin-top: 2px; }
+</style>
+                    </head>
+                    <body>
+                        <div style="float: right; width: 30%; text-align: right; margin-bottom: 10px;">
+        <img src="https://www.myplannedcare.nhs.uk/wp-content/uploads/2022/01/Sheffield-Teaching-Hospitals-NHS-Foundation-Trust.png" 
+             alt="Sheffield Teaching Hospitals NHS Foundation Trust Logo" 
+             style="max-width: 150px; height: auto;">
+			 <p style="font-size: 8px; margin-top: 2px; color: #555;">STH NHS Foundation Trust Logo</p>
+    </div>
+
+    <div style="clear: right; width: 100%;">
+        
+        <h1 style="font-size: 10
+		pt; font-weight: bold; text-align: left; margin-bottom: 20px;">
+            UNSOCIAL HOURS & OVERTIME CLAIM FORM - MONTHLY PAID STAFF (non-medical)
+        </h1>
+        
+        <div class="details" style="width: 100%; display: block; overflow: hidden;">
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                
+                <div style="width: 60%; text-align: left;">
+                    <span style="display: inline-block; text-align: right; width: 140px; font-weight: bold;">Employee Name:</span> 
+                    <span class="fill-line" style="width: calc(100% - 100px);">${profile.name || 'Firstname Surname'}</span>
+                </div>
+                
+                <div style="width: 40%; text-align: left;">
+                    <span style="display: inline-block;">
+                        <span style="display: inline-block; text-align: right; width: 200px; font-weight: bold;">Dept:</span> 
+                        <span class="fill-line" style="width: 150px;">MIMP</span>
+                    </span>
+                </div>
+            </div>
+            
+            <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                
+                <div style="width: 50%; text-align: left;">
+                    <span style="display: inline-block; text-align: right; width: 140px; font-weight: bold;">Assignment number:</span> 
+                    <span class="fill-line" style="width: calc(100% - 150px);">${profile.payrollNumber || 'xxxxxxxx'}</span>
+                </div>
+                
+                <div style="width: 50%; text-align: right;">
+                    <span style="display: inline-block;">
+                        <span style="display: inline-block; text-align: right; width: 180px; font-weight: bold;">Claim for the month of:</span> 
+                        <span class="fill-line">${monthName}</span>
+                    </span>
+                </div>
+            </div>
+            
+        </div>
+        
+    </div>
+    </div>
+
+                        <ul class="instructions">
+                            <li>ONLY hours attracting payments over and above basic hours need recording on this claim form.</li>
+							<li>All hours claimed must be exclusive of meal breaks and time off in lieu (TOIL).</li
+                            <li>Claims must be received by Payroll Services by the 4th of the following month to prevent payment delay.</li>
+                            <li>Please refer to the notes overleaf for guidance on completion.</li>
+                        </ul>
+
+                                                <table>
+                            <thead>
+                                <tr style="background-color: #ddd;">
+                                    <th rowspan="2" style="width: 5%;"></th>
+                                    <th rowspan="2" style="width: 5%;">Day</th>
+                                    
+                                    <th rowspan="2" style="width: 8%;">Shift Start (time)</th>
+                                    <th rowspan="2" style="width: 8%;">Shift End (time)</th>
+                                    
+                                    <th colspan="4">Unsocial Hours Enhancements</th>
+                                    <th rowspan="2" style="width: 8%;">Extra Hours (20:30>)</th> 
+                                    <th colspan="4">Overtime (Over ${profile.contractedHours || '37.5'}hrs a week)</th>
+                                     
+                                </tr>
+                                <tr style="background-color: #ddd;">
+                                    <th style="width: 6%;">Sat</th>
+                                    <th style="width: 6%;">Sun</th>
+                                    <th style="width: 6%;">Night Duty</th>
+                                    <th style="width: 6%;">Bank Hol</th>
+                                    <th style="width: 6%;">Mon-Fri</th>
+                                    <th style="width: 6%;">Sat</th>
+                                    <th style="width: 6%;">Sun</th>
+                                    <th style="width: 6%;">Bank Hol</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tableRowsHtml}
+                                ${totalsRowHtml}
+                            </tbody>
+                        </table>
+                        <p style="font-weight: bold; margin-bottom: 10px;">DECLARATION AND AUTHORISATION
+</p>
+                             <p style="font-weight: normal; margin-bottom: 10px;">I declare that the information given is accurate. I understand that any deliberate falsification will be regarded as gross misconduct which may result in dismissal, prosecution and civil recovery proceedings.</p>
+                        <div class="footer-section">
+    
+    
+</div>
+
+<style>
+/* ... (Your existing styles) ... */
+
+/* UPDATED style for the cursive name */
+.cursive-signature {
+    font-family: "Brush Script MT", "Lucida Handwriting", cursive;
+    font-size: 1.4em; /* INCREASED SIZE */
+    display: inline-block;
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+    text-align: center;
+    min-width: 250px; /* Adjusted min-width to support larger font */
+}
+
+/* New style for blank signature lines */
+.blank-signature-line {
+    border-bottom: 1px solid #000;
+    padding-bottom: 2px;
+    display: inline-block;
+    vertical-align: bottom;
+}
+
+/* ... (Rest of your styles) ... */
+</style>
+
+<div class="footer-section" style="display: block; margin-top: 5px; font-size: 0.9em;">
+    
+    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+        
+        <div style="width: 65%; text-align: left;">
+            <span style="font-weight: bold; padding-right: 5px;">Claimant Signature:</span>
+            <span class="cursive-signature">${profile.name || 'Firstname Surname'}</span>
+        </div>
+        
+        <div style="width: 35%; text-align: center;">
+            <span style="font-weight: bold; padding-right: 5px;">Date:</span>
+            <span class="blank-signature-line" style="width: 120px;">${new Date().toLocaleDateString()}</span>
+        
+		</div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+        
+        <div style="width: 65%; text-align: left;">
+            <span style="font-weight: bold; padding-right: 5px;">Certified correct (manager):</span>
+            <span class="blank-signature-line" style="width: 210px;"></span>
+        </div>
+        
+        <div style="width: 35%; text-align: center;">
+            <span style="font-weight: bold; padding-right: 5px;">Date:</span>
+            <span class="blank-signature-line" style="width: 120px;"></span>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
+        
+        <div style="width: 65%; text-align: left;">
+            <span style="font-weight: bold; padding-right: 5px;">Manager's Name (print):</span>
+            <span class="blank-signature-line" style="width: 230px;"></span>
+        </div>
+        
+        <div style="width: 35%; text-align: center;">
+            <span style="font-weight: bold; padding-right: 5px;">Cost centre:</span>
+            <span class="blank-signature-line" style="width: 155px;"></span>
+        </div>
+    </div>
+
+</div>
+                    </body>
+                </html>
+            `;
+
+            // 4. Open and Print
+            const printWindow = window.open('', '_blank');
+            printWindow.document.write(printContent);
+            printWindow.document.close();
+            printWindow.focus();
+            printWindow.print();
+        }
+        // ------------------------------------
+
+        // --- CALENDAR RENDERING ---
+
+        window.renderCalendar = function() {
+            const date = new Date(currentYear, currentMonth, 1);
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            
+            // Get the full month name for the button and header
+            const monthNameLong = date.toLocaleDateString('en-US', { month: 'long' });
+
+            // Update calendar header
+            document.getElementById('current-month-year').textContent = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            // Update button texts
+            document.getElementById('report-button-text').textContent = `Generate ${monthNameLong} Report`;
+            document.getElementById('clear-month-text').textContent = `${monthNameLong}'s`;
+
+            let startDay = date.getDay();
+            startDay = (startDay + 6) % 7; // Monday start adjustment
+
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+
+            // Fill in preceding grayed-out days
+            for (let i = 0; i < startDay; i++) {
+                const prevDay = document.createElement('div');
+                prevDay.className = 'calendar-day day-disabled bg-gray-100';
+                grid.appendChild(prevDay);
+            }
+
+            // Fill in actual days
+            for (let day = 1; day <= daysInMonth; day++) {
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                const shift = userShifts[dateStr];
+
+                const dayDiv = document.createElement('div');
+                dayDiv.className = 'calendar-day flex flex-col justify-start items-start ' + getShiftColorClass(shift, new Date(dateStr).getDay());
+                dayDiv.dataset.date = dateStr;
+                dayDiv.onclick = () => showShiftModal(dateStr);
+
+                dayDiv.innerHTML = `<p class="text-lg font-bold w-full text-right">${day}</p>`;
+
+                if (shift) {
+                    dayDiv.innerHTML += `
+                        <div class="mt-1 text-xs text-gray-800 space-y-0.5">
+                            <p class="font-bold">${shift.shiftType}</p>
+                            <p>${shift.startTime} - ${shift.finishTime}</p>
+                            ${(shift.nightDuty || 0) > 0 ? '<p class="text-purple-600 font-semibold">Night Duty</p>' : ''}
+                            ${(shift.extraTimeWorkedMinutes || 0) > 0 ? '<p class="text-orange-700 font-semibold">Extra Time</p>' : ''}
+                            ${(shift.bankHolidayEnhancement || 0) > 0 ? '<p class="text-red-700 font-semibold">BH Hrs</p>' : ''}
+                            ${(shift.weekendEnhancement || 0) > 0 ? '<p class="text-blue-700 font-semibold">Weekend Hrs</p>' : ''}
+                        </div>
+                    `;
+                }
+                grid.appendChild(dayDiv);
+            }
+        }
+
+        // --- UPDATED LOGIC FOR COLOR-CODING ---
+        function getShiftColorClass(shift, dayOfWeek) {
+            if (!shift) return 'bg-white';
+
+            const { shiftType, startTime, finishTime } = shift;
+            
+            // The default shift time is 07:20 - 20:30
+            const isDefaultShiftTime = startTime === '07:20' && finishTime === '20:30';
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // 0=Sun, 6=Sat
+            const isWeekday = !isWeekend;
+
+            switch (shiftType) {
+                case 'Bank Holiday':
+                    // Bank holiday shift is always light grey, regardless of time deviation
+                    return 'shift-bank-holiday';
+                
+                case 'Bank Holiday Overtime':
+                    // Light purple if default, darker purple if modified
+                    return isDefaultShiftTime ? 'shift-bh-ot-default' : 'shift-bh-ot-modified';
+
+                case 'Overtime':
+                    // Light pink if default, darker pink if modified
+                    return isDefaultShiftTime ? 'shift-overtime-default' : 'shift-overtime-modified';
+                
+                case 'Standard':
+                    if (isWeekday) {
+                        // Light green if default, darker green if modified
+                        return isDefaultShiftTime ? 'shift-standard-default' : 'shift-standard-modified';
+                    }
+                    if (isWeekend) {
+                        // Light orange if default, darker orange if modified
+                        return isDefaultShiftTime ? 'shift-weekend-default' : 'shift-weekend-modified';
+                    }
+                    // Fallback
+                    return 'bg-white';
+                    
+                default:
+                    return 'bg-white';
+            }
+        }
+        // ------------------------------------
+
+        window.changeMonth = function(delta) {
+            currentMonth += delta;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            renderCalendar();
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            const today = new Date();
+            currentYear = today.getFullYear();
+            currentMonth = today.getMonth();
+
+            loadInitialData();
+        };
+
+        // Expose functions globally for HTML
+        window.saveProfile = saveProfile;
+        window.showShiftModal = showShiftModal;
+        window.closeShiftModal = closeShiftModal;
+        window.calculateEnhancements = calculateEnhancements;
+        window.deleteShift = deleteShift;
+        window.generateReport = generateReport;
+        window.closeReportModal = closeReportModal;
+        window.editProfile = editProfile; // Expose the new function
+        window.clearAllShifts = clearAllShifts; // Expose the new function
+        window.printReport = printReport; // Expose the new function
+        window.checkCustomContractedHours = checkCustomContractedHours; // Expose the new function
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
