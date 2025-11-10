@@ -230,37 +230,37 @@
         <p class="text-sm text-gray-500 mb-6" id="report-period"></p>
 
 <div class="p-4 border-t border-gray-200 mt-6 flex justify-between items-center">
-         
-            <div class="flex items-center space-x-2 text-sm">
-                <label for="current-print-scale" class="font-medium text-gray-700">PDF Scale:</label>
-                <div class="flex items-center">
-                    <input 
-                        type="number" 
-                        id="current-print-scale" 
-                        min="10" 
-                        max="200"
-                        value="100" 
-                        onchange="changePrintScale()" 
-                        class="w-16 p-1 border border-gray-300 rounded-l-md text-center focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                    <span class="p-1 border border-l-0 border-gray-300 bg-gray-50 rounded-r-md text-gray-600">%</span>
-                </div>
-                <button onclick="resetPrintScale()" title="Reset to device default" class="p-1 text-red-500 hover:text-red-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                      <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7.42V6a1 1 0 012 0v2.414l.879-.879a1 1 0 111.414 1.414L8.414 11H12a1 1 0 110 2H6a1 1 0 01-1-1V5.101A7.002 7.002 0 014 8.051V3a1 1 0 011-1zm6 16a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 111.885-.666A5.002 5.002 0 0014.001 12.58V14a1 1 0 01-2 0v-2.414l-.879.879a1 1 0 11-1.414-1.414L11.586 9H8a1 1 0 110-2h6a1 1 0 011 1v5.101A7.002 7.002 0 0116 11.949V17a1 1 0 01-1 1z" clip-rule="evenodd" />
-                    </svg>
-                </button>
-            </div>
-            
-            <div class="flex space-x-3">
-                <button onclick="closeReportModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition">
-                    Close
-                </button>
-                <button onclick="printReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-md">
-                    Print Report (PDF)
-                </button>
-            </div>
+    
+    <div class="flex items-center space-x-2 text-sm">
+        <label for="current-print-scale" class="font-medium text-gray-700">PDF Scale:</label>
+        <div class="flex items-center">
+            <input 
+                type="number" 
+                id="current-print-scale" 
+                min="10" 
+                max="200"
+                value="100" 
+                onchange="changePrintScale()" 
+                class="w-16 p-1 border border-gray-300 rounded-l-md text-center focus:ring-indigo-500 focus:border-indigo-500"
+            >
+            <span class="p-1 border border-l-0 border-gray-300 bg-gray-50 rounded-r-md text-gray-600">%</span>
         </div>
+        <button onclick="resetPrintScale()" title="Reset to device default" class="p-1 text-red-500 hover:text-red-700">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="size-6">
+                <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-4.28 9.22a.75.75 0 0 0 0 1.06l3 3a.75.75 0 1 0 1.06-1.06l-1.72-1.72h5.69a.75.75 0 0 0 0-1.5h-5.69l1.72-1.72a.75.75 0 0 0-1.06-1.06l-3 3Z" clip-rule="evenodd" />
+            </svg>
+        </button>
+    </div>
+    
+    <div class="flex space-x-3">
+        <button onclick="closeReportModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition">
+            Close
+        </button>
+        <button onclick="printReport()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition shadow-md">
+            Print Report (PDF)
+        </button>
+    </div>
+</div>
 		
         <div id="report-content" class="space-y-4">
             <div class="bg-gray-100 p-4 rounded-lg">
