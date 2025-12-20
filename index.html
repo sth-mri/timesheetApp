@@ -56,7 +56,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_42b_test</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_42c_test</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -1247,7 +1247,7 @@ function formatHours(minutes) {
                 const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
                 const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 
-                // FIX: Define this at the top level of the timeout so it is available for both loops
+                // FIX 1: Defined at the top level so it is accessible to all loops
                 const dayNamesArr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
                 const shiftsInMonth = Object.keys(userShifts)
@@ -1298,7 +1298,7 @@ function formatHours(minutes) {
                         let bhMins  = (shift.shiftType.includes('Bank Holiday')) ? totalPaidMinutes : 0;
 
                         if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
-                            // 1. BASE HOURS
+                            // 1. BASE HOURS (Standard Shifts get Unsocial Hours)
                             totals.uhNight += nightMins; baseShift.uhNight += nightMins;
                             totals.uhSat += satMins;     baseShift.uhSat += satMins;
                             totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
@@ -1394,11 +1394,10 @@ function formatHours(minutes) {
                                     else if (dayOfWeek === 0) { baseShift.otSun += totalPaidMinutes; totals.otSun += totalPaidMinutes; }
                                 }
                             }
-
-                            totals.uhNight += nightMins; baseShift.uhNight += nightMins;
-                            totals.uhSat += satMins;     baseShift.uhSat += satMins;
-                            totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
-                            if (shift.shiftType.includes('Bank Holiday')) { totals.uhBH += bhMins; baseShift.uhBH += bhMins; }
+                            
+                            // FIX 2: REMOVED UNSOCIAL HOURS ACCUMULATION FOR OVERTIME SHIFTS
+                            // Overtime Rate supersedes Unsocial Hours Enhancements.
+                            // The lines adding uhNight, uhSat, uhSun, uhBH have been deleted here.
                         }
                         
                         if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
@@ -1504,6 +1503,7 @@ function formatHours(minutes) {
 
         }, 50);
     }
+	
 
 window.executePrintReport = function() {
     const { shiftsInMonth, monthName } = currentReportData;
