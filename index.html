@@ -56,7 +56,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_42c_test</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_42d_test</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -1247,7 +1247,6 @@ function formatHours(minutes) {
                 const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
                 const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
                 
-                // FIX 1: Defined at the top level so it is accessible to all loops
                 const dayNamesArr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
                 const shiftsInMonth = Object.keys(userShifts)
@@ -1292,26 +1291,70 @@ function formatHours(minutes) {
                         const totalPaidMinutes = shift.totalPaidMinutes || 0;
                         totals.totalPaidMinutes += totalPaidMinutes;
 
-                        let nightMins = shift.nightDuty || 0;
-                        let satMins = (dayOfWeek === 6) ? totalPaidMinutes : 0;
-                        let sunMins = (dayOfWeek === 0) ? totalPaidMinutes : 0;
-                        let bhMins  = (shift.shiftType.includes('Bank Holiday')) ? totalPaidMinutes : 0;
+                        // --- LOGIC: SEPARATE STANDARD HRS FROM OVERTIME HRS ---
+                        // We need to know how many minutes are "Standard" (attracting Unsocial) 
+                        // vs how many are "Overtime" (Replacement rate, no Unsocial).
+                        
+                        let enhancedOtMinutes = 0; // Minutes paid as Overtime (Red)
 
+                        // 1. Identify OT Minutes based on Shift Type
                         if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
-                            // 1. BASE HOURS (Standard Shifts get Unsocial Hours)
-                            totals.uhNight += nightMins; baseShift.uhNight += nightMins;
-                            totals.uhSat += satMins;     baseShift.uhSat += satMins;
-                            totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
-                            if (shift.shiftType === 'Bank Holiday') { totals.uhBH += bhMins; baseShift.uhBH += bhMins; }
+                            // Add Deviations taken as OT
+                            if (shift.extraTimeWorkedMinutes > 0 && shift.lateFinishEnhancement === 'Overtime') {
+                                enhancedOtMinutes += shift.extraTimeWorkedMinutes;
+                            }
+                            if (shift.earlyStartMinutes > 0 && shift.earlyStartEnhancement === 'Overtime' && !isPartTime) {
+                                enhancedOtMinutes += shift.earlyStartMinutes;
+                            }
+                            // Full Time Excess handled as OT
+                            if (!isPartTime && shift.partTimeOvertimeMinutes > 0 && shift.excessHoursAction === 'Overtime') {
+                                enhancedOtMinutes += shift.partTimeOvertimeMinutes;
+                            }
+                        } 
+                        else if (shift.shiftType === 'Overtime' || shift.shiftType === 'Bank Holiday Overtime') {
+                            if (isPartTime) {
+                                // Part Time: Only the 'Overtime' portion is Red. Rest is Blue (Extra Hrs).
+                                enhancedOtMinutes += shift.partTimeOvertimeMinutes || 0;
+                            } else {
+                                // Full Time: Whole shift is OT unless Toil selected
+                                if (shift.fullTimeOvertimeAction !== 'Toil') {
+                                    enhancedOtMinutes += totalPaidMinutes;
+                                }
+                            }
+                        }
 
-                            // 2. STANDARD DEVIATIONS (Late Finish / Early Start)
+                        // 2. Calculate Standard Minutes (Basis for Unsocial)
+                        // Standard Minutes = Total - OT. (Part Time Extra Hrs count as Standard for Unsocial purposes).
+                        const standardMinutes = Math.max(0, totalPaidMinutes - enhancedOtMinutes);
+
+                        // 3. Calculate UNSOCIAL HOURS (Using standardMinutes)
+                        // Night Duty: Use calculated value, but FORCE 0 if it's a full OT shift
+                        let nightMins = (shift.nightDuty || 0);
+                        if (shift.shiftType.includes('Overtime') && !isPartTime) nightMins = 0; // Full Time OT = No Night Duty
+                        
+                        // Sat/Sun/BH: Calculated on standardMinutes only (avoids double counting OT and Unsocial)
+                        let satMins = (dayOfWeek === 6) ? standardMinutes : 0;
+                        let sunMins = (dayOfWeek === 0) ? standardMinutes : 0;
+                        let bhMins  = (shift.shiftType.includes('Bank Holiday') && !shift.shiftType.includes('Overtime')) ? standardMinutes : 0;
+
+                        // Add to Totals
+                        totals.uhNight += nightMins; baseShift.uhNight += nightMins;
+                        totals.uhSat += satMins;     baseShift.uhSat += satMins;
+                        totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
+                        if (shift.shiftType === 'Bank Holiday') { totals.uhBH += bhMins; baseShift.uhBH += bhMins; }
+
+                        // 4. MAP OVERTIME / EXTRA HOURS TO COLUMNS
+                        
+                        // A. Standard Deviations (Late Finish / Early Start)
+                        if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
                             if (shift.extraTimeWorkedMinutes > 0) {
                                 if (isPartTime && shift.lateFinishEnhancement === 'Overtime') {
+                                    // Part Time "Overtime" is usually Extra Hours (Blue)
                                     baseShift.extraHoursWorked += shift.extraTimeWorkedMinutes;
                                     totals.extraHoursWorked += shift.extraTimeWorkedMinutes;
                                     baseShift.extraHours = baseShift.extraHoursWorked;
                                 } else if (shift.lateFinishEnhancement === 'Overtime') {
-                                    // Full Time OT
+                                    // Full Time OT (Red)
                                     if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += shift.extraTimeWorkedMinutes; totals.otMonFri += shift.extraTimeWorkedMinutes; }
                                     else if (dayOfWeek === 6) { baseShift.otSat += shift.extraTimeWorkedMinutes; totals.otSat += shift.extraTimeWorkedMinutes; }
                                     else if (dayOfWeek === 0) { baseShift.otSun += shift.extraTimeWorkedMinutes; totals.otSun += shift.extraTimeWorkedMinutes; }
@@ -1320,7 +1363,6 @@ function formatHours(minutes) {
                                     totals.toilAccrued += shift.extraTimeWorkedMinutes;
                                 }
                             }
-                            
                             if (shift.earlyStartMinutes > 0) {
                                 if (shift.earlyStartEnhancement === 'Overtime' && !isPartTime) {
                                     if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += shift.earlyStartMinutes; totals.otMonFri += shift.earlyStartMinutes; }
@@ -1329,39 +1371,41 @@ function formatHours(minutes) {
                                     totals.toilAccrued += shift.earlyStartMinutes;
                                 }
                             }
-
-                            // 3. WEEKLY EXCESS HOURS (SPLIT HANDLING)
-                            if (shift.partTimeOvertimeMinutes > 0) {
-                                const ptOt = shift.partTimeOvertimeMinutes;
-                                
+                            
+                            // Excess Hours (Split/OT/Toil)
+                            const excessOt = shift.partTimeOvertimeMinutes || 0;
+                            const excessToil = shift.partTimeToilMinutes || 0; // From Split
+                            
+                            if (excessOt > 0) {
                                 if (isPartTime) {
-                                    baseShift.extraHoursWorked += ptOt;
-                                    totals.extraHoursWorked += ptOt;
+                                    // Part Time Excess is usually Extra Hours
+                                    baseShift.extraHoursWorked += excessOt;
+                                    totals.extraHoursWorked += excessOt;
                                     baseShift.extraHours = baseShift.extraHoursWorked;
                                 } else {
-                                    // Full Time Excess Paid as OT
-                                    if (shift.shiftType === 'Bank Holiday') { baseShift.otBH += ptOt; totals.otBH += ptOt; }
-                                    else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += ptOt; totals.otMonFri += ptOt; }
-                                    else if (dayOfWeek === 6) { baseShift.otSat += ptOt; totals.otSat += ptOt; }
-                                    else if (dayOfWeek === 0) { baseShift.otSun += ptOt; totals.otSun += ptOt; }
+                                    // Full Time Excess is OT
+                                    if (shift.excessHoursAction === 'Toil') {
+                                        baseShift.toilAccrued += excessOt;
+                                        totals.toilAccrued += excessOt;
+                                    } else {
+                                        // OT
+                                        if (shift.shiftType === 'Bank Holiday') { baseShift.otBH += excessOt; totals.otBH += excessOt; }
+                                        else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += excessOt; totals.otMonFri += excessOt; }
+                                        else if (dayOfWeek === 6) { baseShift.otSat += excessOt; totals.otSat += excessOt; }
+                                        else if (dayOfWeek === 0) { baseShift.otSun += excessOt; totals.otSun += excessOt; }
+                                    }
                                 }
                             }
-                            
-                            // Handle TOIL Portion of Split
-                            if (shift.excessHoursAction === 'Split' && shift.partTimeToilMinutes > 0) {
-                                baseShift.toilAccrued += shift.partTimeToilMinutes;
-                                totals.toilAccrued += shift.partTimeToilMinutes;
+                            if (excessToil > 0) {
+                                baseShift.toilAccrued += excessToil;
+                                totals.toilAccrued += excessToil;
                             }
-                            // Handle Full TOIL Selection for Excess
-                            if (shift.excessHoursAction === 'Toil' && shift.partTimeOvertimeMinutes > 0) {
-                                baseShift.toilAccrued += shift.partTimeOvertimeMinutes;
-                                totals.toilAccrued += shift.partTimeOvertimeMinutes;
-                            }
+                        }
 
-                        } 
+                        // B. Whole Shift Overtime / Extra Shifts
                         else if (shift.shiftType === 'Overtime' || shift.shiftType === 'Bank Holiday Overtime') {
-                            // WHOLE SHIFT OVERTIME LOGIC
                             if (isPartTime) {
+                                // Part Time Logic
                                 const ptExtra = shift.partTimeExtraMinutes || totalPaidMinutes; 
                                 const ptOt    = shift.partTimeOvertimeMinutes || 0;
                                 
@@ -1394,10 +1438,6 @@ function formatHours(minutes) {
                                     else if (dayOfWeek === 0) { baseShift.otSun += totalPaidMinutes; totals.otSun += totalPaidMinutes; }
                                 }
                             }
-                            
-                            // FIX 2: REMOVED UNSOCIAL HOURS ACCUMULATION FOR OVERTIME SHIFTS
-                            // Overtime Rate supersedes Unsocial Hours Enhancements.
-                            // The lines adding uhNight, uhSat, uhSun, uhBH have been deleted here.
                         }
                         
                         if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
@@ -1454,7 +1494,6 @@ function formatHours(minutes) {
                 } else {
                     shiftsInMonth.forEach(shift => {
                         const dateObj = new Date(shift.date + 'T00:00:00');
-                        // FIX: dayNamesArr is now accessible here
                         const dayOfWeek = dayNamesArr[dateObj.getDay()];
                         const paidHoursText = `<span class="text-indigo-600 font-semibold">${formatHours(shift.totalPaidMinutes)} Paid Hrs</span>`;
                         
