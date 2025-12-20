@@ -992,13 +992,15 @@ function formatHours(minutes) {
     if (shiftType === 'Bank Holiday' || shiftType === 'Bank Holiday Overtime') enhancements.bankHolidayEnhancement = totalPaidMinutes;
 
     // --- 4. DEVIATION & DISPLAY ---
+   
+    // FIX: Check 'current...Val' (the live input) FIRST. 
+    // If that doesn't exist, check saved data, then default.
     const deviationSetup = {
-        earlyStartEnhancement: deviationData.earlyStartEnhancement || defaultPositiveDeviation, 
-        lateFinishEnhancement: deviationData.lateFinishEnhancement || defaultPositiveDeviation,
-        lateStartAdjustment: deviationData.lateStartAdjustment || 'Neg Toil',
-        earlyFinishAdjustment: deviationData.earlyFinishAdjustment || 'Neg Toil',
+        earlyStartEnhancement: currentEarlyStartVal || deviationData.earlyStartEnhancement || defaultPositiveDeviation, 
+        lateFinishEnhancement: currentLateFinishVal || deviationData.lateFinishEnhancement || defaultPositiveDeviation,
+        lateStartAdjustment: currentLateStartVal || deviationData.lateStartAdjustment || 'Neg Toil',
+        earlyFinishAdjustment: currentEarlyFinishVal || deviationData.earlyFinishAdjustment || 'Neg Toil',
         partTimeOvertimeAction: currentPtOtAction || deviationData.partTimeOvertimeAction || 'Overtime',
-        // NEW: Full Time Action
         fullTimeOvertimeAction: currentFtOtAction || deviationData.fullTimeOvertimeAction || 'Overtime'
     };
 
