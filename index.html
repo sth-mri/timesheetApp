@@ -56,7 +56,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv19a_41_test</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv17_41i_test</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -333,7 +333,7 @@
         <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700">Google Apps Script Web App URL</label>
             <p id="xyz" class="mt-1 text-xs text-gray-400 font-mono break-all bg-gray-50 p-2 rounded border border-gray-200">
-				https://script.google.com/macros/s/AKfycbydm_0U95-yIP0Af5hZ4PywJLGpYTlOtRlhyD9TtBR_2iZxH04jev1OJuoF_U1qT7ul/exec
+				https://script.google.com/macros/s/AKfycbw6eJrUCagLaHKyyOH9syLsrm_PEjgfWnsUhJxG0jv9zD7ETZuxwOb4LvXUv7-EOKmY/exec
             </p>
         </div>
 
@@ -494,8 +494,7 @@ function formatHours(minutes) {
             return monday.toISOString().split('T')[0];
         }
 
-        // function getWeeklyPaidMinutes
-	function getWeeklyPaidMinutes(targetDateStr) {
+        function getWeeklyPaidMinutes(targetDateStr) {
             const targetDate = new Date(targetDateStr);
             const mondayStr = getMonday(targetDateStr);
             const mondayDate = new Date(mondayStr);
@@ -505,25 +504,18 @@ function formatHours(minutes) {
             let totalMinutes = 0;
 
             Object.keys(userShifts).forEach(dateKey => {
-                // Skip the specific date we are currently editing/processing
+                // Skip the specific date we are currently editing
                 if (dateKey === targetDateStr) return;
 
                 const shiftDate = new Date(dateKey);
-                // Check if this shift falls within the target week
+                // Check if this shift falls within the target week (Mon <= Date < Next Mon)
                 if (shiftDate >= mondayDate && shiftDate < nextMondayDate) {
-                    const shift = userShifts[dateKey];
-                    // Only count Standard/BH shifts towards the "Contracted" total
-                    // Overtime shifts are separate and don't count towards the 37.5h base
-                    if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
-                        // We use the full paid duration of previous standard shifts
-                        totalMinutes += (shift.totalPaidMinutes || 0);
-                    }
+                    totalMinutes += userShifts[dateKey].totalPaidMinutes || 0;
                 }
             });
 
             return totalMinutes;
         }
-	
 
         // --- LOCAL STORAGE DATA HANDLING ---
 
@@ -722,7 +714,18 @@ function formatHours(minutes) {
                     
                     // Check if times are different from standard
                     const isNonStandard = shift.startTime !== '07:20' || shift.finishTime !== '20:30';
-                    const titleText = shift.shiftType + (isNonStandard ? ' !' : '');
+                    
+                    // --- NEW LOGIC START ---
+                    // If Part Time (< 37.5h) and shift is Overtime, display "Extra Hours"
+                    let displayLabel = shift.shiftType;
+                    const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+                    
+                    if (contractHrs < 37.5 && displayLabel === 'Overtime') {
+                        displayLabel = 'Extra Hours';
+                    }
+                    
+                    const titleText = displayLabel + (isNonStandard ? ' !' : '');
+                    // --- NEW LOGIC END ---
 
                     shiftInfoHtml = `
                         <div class="mt-1 text-xs font-bold text-gray-900 leading-tight">${titleText}</div>
@@ -741,7 +744,7 @@ function formatHours(minutes) {
             
             document.getElementById('clear-month-text').textContent = monthName + "'s";
         }
-
+		
         function getShiftClass(shift, date) {
             if (!shift) {
                 return 'bg-white';
@@ -895,258 +898,547 @@ function formatHours(minutes) {
 
         // --- CORE CALCULATIONS (UPDATED WITH WEEKLY STATUS) ---
         
-		window.generateReport = function() {
-        if (!userProfile.name || !userProfile.payrollNumber) {
-            showMessageBox("Error", "Please save your Name and Payroll Number in the profile section first.", true);
-            return;
+	window.calculateEnhancements = function() {
+    if (!selectedDate) return;
+
+    // --- 1. GET SETTINGS & INPUTS ---
+    const deviationData = userShifts[selectedDate]?.deviation || {};
+    
+    // Existing deviation settings
+    const currentEarlyStartVal = document.getElementById('earlyStartEnhancement')?.value;
+    const currentLateFinishVal = document.getElementById('lateFinishEnhancement')?.value;
+    const currentLateStartVal = document.getElementById('lateStartAdjustment')?.value;
+    const currentEarlyFinishVal = document.getElementById('earlyFinishAdjustment')?.value;
+    
+    // Part Time Action
+    const currentPtOtAction = document.getElementById('partTimeOvertimeAction')?.value;
+    
+    // NEW: Full Time Overtime Action
+    const currentFtOtAction = document.getElementById('fullTimeOvertimeAction')?.value;
+
+    const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+    const startTimeStr = document.getElementById('startTime').value;
+    const finishTimeStr = document.getElementById('finishTime').value;
+    const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+    
+    // Contract Checks
+    const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+    const isPartTime = contractHrs < 37.5;
+    const FULL_TIME_MINUTES = 2250; // 37.5 Hours
+    
+    const otLabel = isPartTime ? 'Record as Extra Hours' : 'Record as Overtime';
+    const defaultPositiveDeviation = isPartTime ? 'Overtime' : 'Toil'; 
+
+    if (!startTimeStr || !finishTimeStr) {
+        document.getElementById('enhancement-display').innerHTML = '<p class="text-red-600">Please enter valid times.</p>';
+        return;
+    }
+
+    // --- 2. TIME CALCULATIONS ---
+    const startMinutes = timeToMinutes(startTimeStr);
+    const finishMinutes = timeToMinutes(finishTimeStr);
+    
+    // Auto-show breaks section
+    const breakSection = document.getElementById('breaks-section');
+    if (startMinutes > timeToMinutes('13:00') || finishMinutes < timeToMinutes('18:00')) {
+        breakSection.classList.remove('hidden');
+    } else {
+        breakSection.classList.add('hidden');
+        document.getElementById('breaksCount').value = '2'; 
+    }
+    const totalBreaksMinutes = breaksCount * 20;
+
+    let totalShiftMinutes = finishMinutes > startMinutes ? finishMinutes - startMinutes : (1440 - startMinutes) + finishMinutes;
+    const totalPaidMinutes = Math.max(0, totalShiftMinutes - totalBreaksMinutes);
+
+    // WEEKLY CUMULATIVE CALCULATION
+    const previousWeeklyMinutes = getWeeklyPaidMinutes(selectedDate);
+    const currentTotalWeeklyMinutes = previousWeeklyMinutes + totalPaidMinutes;
+    const contractMinutes = contractHrs * 60;
+    const isOverContract = currentTotalWeeklyMinutes > contractMinutes;
+
+    // Part Time Threshold Logic
+    let partTimeExtraMinutes = 0; 
+    let partTimeOvertimeMinutes = 0; 
+    let isCrossingFullTimeThreshold = false;
+
+    if (isPartTime) {
+        if (currentTotalWeeklyMinutes > FULL_TIME_MINUTES) {
+            const minutesAlreadyOver = Math.max(0, previousWeeklyMinutes - FULL_TIME_MINUTES);
+            partTimeOvertimeMinutes = Math.min(totalPaidMinutes, currentTotalWeeklyMinutes - FULL_TIME_MINUTES - minutesAlreadyOver);
+            partTimeExtraMinutes = totalPaidMinutes - partTimeOvertimeMinutes;
+            isCrossingFullTimeThreshold = partTimeOvertimeMinutes > 0;
+        } else {
+            partTimeExtraMinutes = totalPaidMinutes;
+        }
+    }
+
+    // --- 3. ENHANCEMENT LOGIC ---
+    const enhancements = {
+        earlyStartMinutes: Math.max(0, DEFAULT_START_TIME_MINUTES - startMinutes),
+        lateStartMinutes: Math.max(0, startMinutes - DEFAULT_START_TIME_MINUTES),
+        earlyFinishMinutes: Math.max(0, DEFAULT_END_TIME_MINUTES - finishMinutes),
+        extraTimeWorkedMinutes: Math.max(0, finishMinutes - DEFAULT_END_TIME_MINUTES),
+        nightDuty: 0,
+        weekendEnhancement: 0,
+        bankHolidayEnhancement: 0,
+        totalPaidMinutes: totalPaidMinutes,
+        partTimeExtraMinutes: partTimeExtraMinutes,
+        partTimeOvertimeMinutes: partTimeOvertimeMinutes
+    };
+
+    const date = new Date(selectedDate);
+    const dayOfWeek = date.getDay(); 
+
+    // FIXED: Only calculate Night Duty / Weekend if the shift is Standard or Bank Holiday.
+    // Overtime shifts are excluded from these specific unsocial enhancements.
+    if (shiftType !== 'Overtime' && shiftType !== 'Bank Holiday Overtime') {
+        
+        // A. Night Duty (Capped at 20:30)
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            const nightStart = 1200; 
+            const effectiveNightFinish = Math.min(finishMinutes, DEFAULT_END_TIME_MINUTES);
+            if (effectiveNightFinish > nightStart) {
+                enhancements.nightDuty = Math.max(0, effectiveNightFinish - Math.max(startMinutes, nightStart));
+            }
+        }
+
+        if (dayOfWeek === 6 || dayOfWeek === 0) enhancements.weekendEnhancement = totalPaidMinutes;
+    }
+    
+    // Bank Holiday enhancement logic remains for standard BH shifts
+    if (shiftType === 'Bank Holiday') enhancements.bankHolidayEnhancement = totalPaidMinutes;
+
+    // --- 4. DEVIATION & DISPLAY ---
+    // --- 4. DEVIATION & DISPLAY ---
+    const deviationSetup = {
+        // FIXED: Check the current dropdown value first (currentEarlyStartVal), 
+        // then the saved data, then the default.
+        earlyStartEnhancement: currentEarlyStartVal || deviationData.earlyStartEnhancement || defaultPositiveDeviation, 
+        lateFinishEnhancement: currentLateFinishVal || deviationData.lateFinishEnhancement || defaultPositiveDeviation,
+        lateStartAdjustment: currentLateStartVal || deviationData.lateStartAdjustment || 'Neg Toil',
+        earlyFinishAdjustment: currentEarlyFinishVal || deviationData.earlyFinishAdjustment || 'Neg Toil',
+        
+        // These two were already correct in your code, but kept here for completeness
+        partTimeOvertimeAction: currentPtOtAction || deviationData.partTimeOvertimeAction || 'Overtime',
+        fullTimeOvertimeAction: currentFtOtAction || deviationData.fullTimeOvertimeAction || 'Overtime'
+    };
+
+    const displayDiv = document.getElementById('enhancement-display');
+    let html = ``;
+
+    // UPDATED: Show Status Bar for EVERYONE
+    const percent = Math.min(100, (currentTotalWeeklyMinutes / contractMinutes) * 100);
+    const colorClass = isOverContract ? 'text-purple-700 bg-purple-50' : 'text-green-700 bg-green-50';
+    
+    html += `
+        <div class="mb-3 p-2 rounded border ${isOverContract ? 'border-purple-200' : 'border-green-200'} ${colorClass} text-xs">
+            <p class="font-bold flex justify-between">
+                <span>Weekly Total:</span>
+                <span>${formatHours(currentTotalWeeklyMinutes)} / ${formatHours(contractMinutes)} Hrs</span>
+            </p>
+            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                <div class="${isOverContract ? 'bg-purple-600' : 'bg-green-600'} h-1.5 rounded-full" style="width: ${percent}%"></div>
+            </div>
+            ${!isPartTime && isOverContract && shiftType === 'Standard' ? 
+              '<p class="mt-1 font-bold text-red-600">⚠ Contract exceeded. Should this shift be Overtime?</p>' : ''}
+        </div>
+    `;
+
+    html += `<p>Total Paid Time: <span class="font-bold">${formatHours(totalPaidMinutes)} hrs</span></p>`;
+    
+    if (enhancements.nightDuty > 0) html += `<p>• Night Duty (20:00-20:30): <strong>${formatHours(enhancements.nightDuty)} hrs</strong></p>`;
+    if (enhancements.weekendEnhancement > 0 && (shiftType === 'Standard' || isPartTime)) html += `<p>• Weekend: <strong>${formatHours(enhancements.weekendEnhancement)} hrs</strong></p>`;
+    if (enhancements.bankHolidayEnhancement > 0) html += `<p>• Bank Holiday: <strong>${formatHours(enhancements.bankHolidayEnhancement)} hrs</strong></p>`;
+
+    // Part Time Text Logic
+    if (isPartTime && (shiftType === 'Overtime' || isCrossingFullTimeThreshold)) {
+        if (partTimeOvertimeMinutes > 0) {
+            html += `<div class="mt-2 p-2 bg-indigo-100 rounded text-xs border border-indigo-200">
+                        <p class="font-bold text-indigo-800">Part Time 37.5h Threshold Exceeded</p>
+                        <ul class="list-disc list-inside mt-1">
+                            <li>Extra Hours (Plain Time): <strong>${formatHours(partTimeExtraMinutes)} hrs</strong></li>
+                            <li>Overtime/TOIL (Enhanced): <strong>${formatHours(partTimeOvertimeMinutes)} hrs</strong></li>
+                        </ul>
+                     </div>`;
+        } else {
+             html += `<p class="text-blue-700 text-sm mt-1">✔ Part Time: Recording as Extra Hours (Below 37.5h).</p>`;
+        }
+    }
+
+    const selectorContainer = document.getElementById('deviation-selectors');
+    selectorContainer.innerHTML = `<p class="font-bold text-lg mb-2 text-yellow-800">Time Deviation Management</p>`;
+    let hasDeviations = false;
+
+    const makeSelect = (id, label, currentVal, options) => {
+        const opts = options.map(o => `<option value="${o.val}" ${currentVal === o.val ? 'selected' : ''}>${o.txt}</option>`).join('');
+        return `<div><label class="block text-sm font-medium text-gray-700">${label}</label>
+                <select id="${id}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">${opts}</select></div>`;
+    };
+
+    // PT Selector
+    if (isPartTime && partTimeOvertimeMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('partTimeOvertimeAction', 
+            `<strong>Exceeded 37.5 hrs by ${formatHours(partTimeOvertimeMinutes)} hrs</strong>. Claim as:`, 
+            deviationSetup.partTimeOvertimeAction,
+            [{val: 'Overtime', txt: 'Overtime (Enhanced Rate)'}, {val: 'Toil', txt: 'TOIL'}]
+        );
+    }
+    
+    // NEW: Full Time Overtime Selector
+    // If Full Time AND (Overtime OR BH Overtime), show TOIL option
+    if (!isPartTime && (shiftType === 'Overtime' || shiftType === 'Bank Holiday Overtime')) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('fullTimeOvertimeAction', 
+            `<strong>Whole Shift Action (${formatHours(totalPaidMinutes)} hrs):</strong>`, 
+            deviationSetup.fullTimeOvertimeAction,
+            [{val: 'Overtime', txt: '1. Payment (Overtime)'}, {val: 'Toil', txt: '2. TOIL'}]
+        );
+    }
+
+    // Standard Deviations
+    if (shiftType === 'Standard' || shiftType === 'Bank Holiday') {
+        if (enhancements.earlyStartMinutes > 0) {
+            hasDeviations = true;
+            selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
+                [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+        }
+        if (enhancements.extraTimeWorkedMinutes > 0) {
+            hasDeviations = true;
+            selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
+                [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+        }
+        if (enhancements.lateStartMinutes > 0) {
+            hasDeviations = true;
+            selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
+                [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+        }
+        if (enhancements.earlyFinishMinutes > 0) {
+            hasDeviations = true;
+            selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
+                [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+        }
+    }
+
+    selectorContainer.classList.toggle('hidden', !hasDeviations);
+
+    displayDiv.innerHTML = html;
+    document.getElementById('shift-form').dataset.calculated = JSON.stringify({ ...enhancements, ...deviationSetup });
+}
+
+        
+        // --- SHIFT DATA HANDLING (LOCAL SAVE/DELETE) ---
+
+        window.handleSaveShift = async function(event) {
+            event.preventDefault();
+
+            if (!selectedDate || !userProfile.name) {
+                showMessageBox("Error", "Please select a date and save your profile first.", true);
+                return;
+            }
+
+            const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+            const startTime = document.getElementById('startTime').value;
+            const finishTime = document.getElementById('finishTime').value;
+            const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+            
+            const calculatedData = JSON.parse(document.getElementById('shift-form').dataset.calculated || '{}');
+
+            const newShift = {
+                shiftType,
+                startTime,
+                finishTime,
+                breaksCount,
+                notes: document.getElementById('shiftNotes').value, // NEW: Save Notes
+                ...calculatedData,
+                userName: userProfile.name,
+                payrollNumber: userProfile.payrollNumber,
+                userEmail: userProfile.userEmail,
+                date: selectedDate,
+                contractedHours: userProfile.contractedHours
+            };
+
+            userShifts[selectedDate] = newShift;
+            saveShiftsToLocalStorage();
+
+            showMessageBox("Success", `Shift for ${selectedDate} saved as ${shiftType}.`, true);
+            closeShiftModal();
+            renderCalendar();
+        }
+
+
+        window.deleteShift = function() {
+            if (!selectedDate || !userShifts[selectedDate]) {
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete the shift for ${selectedDate}?`)) {
+                delete userShifts[selectedDate];
+                saveShiftsToLocalStorage();
+                showMessageBox("Success", `Shift for ${selectedDate} has been deleted.`, true);
+                closeShiftModal();
+                renderCalendar();
+            }
         }
         
-        showMessageBox("Generating Report", "Calculating totals for the month. Please wait...", false);
-
-        setTimeout(() => {
-            try {
-                const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
-                const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-                const dayNamesArr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
-                const shiftsInMonth = Object.keys(userShifts)
-                    .filter(dateStr => dateStr.startsWith(yearMonthPrefix))
-                    .sort()
-                    .map(dateStr => userShifts[dateStr]);
-
-                const totals = {
-                    uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
-                    extraHoursWorked: 0, 
-                    otMonFri: 0, otSat: 0, otSun: 0, otBH: 0, 
-                    totalPaidMinutes: 0, 
-                    toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0, 
-                };
-
-                const detailedPrintShifts = [];
-                const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
-                const isPartTime = userProfile.contractedHours < 37.5;
-
-                // --- PROCESS EVERY DAY ---
-                for (let day = 1; day <= daysInMonth; day++) {
-                    const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                    const shift = userShifts[dateStr];
-                    const dateObj = new Date(dateStr);
-                    const dayOfWeek = dateObj.getDay(); // 0=Sun
-                    
-                    const baseShift = {
-                        date: dateStr,
-                        weekday: dayNamesArr[dayOfWeek],
-                        dayOfMonth: day,
-                        shiftType: shift ? shift.shiftType : 'None',
-                        startTime: shift ? shift.startTime : '',
-                        finishTime: shift ? shift.finishTime : '',
-                        notes: shift ? (shift.notes || '') : '',
-                        // Metrics
-                        uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
-                        extraHoursWorked: 0, 
-                        otMonFri: 0, otSat: 0, otSun: 0, otBH: 0,
-                        toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0,
-                        totalPaidMinutes: shift ? shift.totalPaidMinutes : 0
-                    };
-
-                    if (shift) {
-                        totals.totalPaidMinutes += shift.totalPaidMinutes;
-
-                        // 1. CALCULATE NIGHT DUTY (STRICT RULES)
-                        // Must be Standard Shift. Must be Mon-Fri (1-5).
-                        // Note: If shift is Overtime, shiftType is 'Overtime' so this naturally fails.
-                        if (shift.shiftType === 'Standard' && dayOfWeek >= 1 && dayOfWeek <= 5) {
-                            // Night Duty calc is done in calculateEnhancements and saved as shift.nightDuty
-                            // But we need to check if 37.5h threshold turns this into OT
-                            // See step 3 below.
-                            baseShift.uhNight = shift.nightDuty || 0;
-                        } else {
-                            baseShift.uhNight = 0; // Explicitly 0 for OT or Weekends
-                        }
-
-                        // 2. WEEKEND & BH UNSOCIAL
-                        if (shift.shiftType === 'Standard' && (dayOfWeek === 6 || dayOfWeek === 0)) {
-                             // Entire shift is Unsocial (Standard Weekend)
-                             if(dayOfWeek === 6) baseShift.uhSat = shift.totalPaidMinutes;
-                             if(dayOfWeek === 0) baseShift.uhSun = shift.totalPaidMinutes;
-                        }
-                        if (shift.shiftType === 'Bank Holiday') {
-                             baseShift.uhBH = shift.totalPaidMinutes;
-                        }
-                        // Note: Bank Holiday Overtime goes to OT column, NOT UH column, based on prompt.
-
-                        // 3. HANDLE OVERTIME & EXCESS HOURS
-                        
-                        // A. EXCESS HOURS (PART TIME > 37.5)
-                        if (shift.partTimeOvertimeMinutes > 0) {
-                            // This shift (or part of it) pushed user over 37.5
-                            const excess = shift.partTimeOvertimeMinutes;
-                            
-                            // Remove Unsocial Hours for the Excess portion
-                            // If the whole shift is excess, remove all ND
-                            if (excess >= shift.totalPaidMinutes) {
-                                baseShift.uhNight = 0;
-                                baseShift.uhSat = 0; 
-                                baseShift.uhSun = 0;
-                            } else {
-                                // Partial excess (usually at end of shift). 
-                                // Night Duty (20:00-20:30) is at end. If excess > 30 mins, ND is gone.
-                                if (baseShift.uhNight > 0 && excess >= 30) baseShift.uhNight = 0;
-                            }
-                            
-                            // Log as OT (Red)
-                            if (dayOfWeek >= 1 && dayOfWeek <= 5) baseShift.otMonFri += excess;
-                            else if (dayOfWeek === 6) baseShift.otSat += excess;
-                            else if (dayOfWeek === 0) baseShift.otSun += excess;
-                            
-                            // The remainder (Standard part of shift) stays as is.
-                        }
-
-                        // B. LATE FINISH (DEVIATION)
-                        if (shift.extraTimeWorkedMinutes > 0 && shift.shiftType !== 'Overtime') {
-                             const lateMins = shift.extraTimeWorkedMinutes;
-                             if (isPartTime) {
-                                 // PT Rule: Extra Hours (Blue) unless > 37.5 (Handled by A above?)
-                                 // calculateEnhancements logic puts excess in partTimeOvertimeMinutes.
-                                 // So strictly "extraTimeWorkedMinutes" here is the BLUE portion (under 37.5).
-                                 // Unless user selected TOIL.
-                                 if (shift.lateFinishEnhancement === 'Toil') {
-                                     baseShift.toilAccrued += lateMins;
-                                 } else {
-                                     // Default Blue Extra Hours
-                                     baseShift.extraHoursWorked += lateMins;
-                                 }
-                             } else {
-                                 // FT Rule: OT (Red) or TOIL
-                                 if (shift.lateFinishEnhancement === 'Toil') {
-                                     baseShift.toilAccrued += lateMins;
-                                 } else {
-                                     // OT Red
-                                     if (dayOfWeek >= 1 && dayOfWeek <= 5) baseShift.otMonFri += lateMins;
-                                     else if (dayOfWeek === 6) baseShift.otSat += lateMins;
-                                     else if (dayOfWeek === 0) baseShift.otSun += lateMins;
-                                 }
-                             }
-                        }
-
-                        // C. WHOLE SHIFT OVERTIME
-                        if (shift.shiftType.includes('Overtime')) {
-                            const otMins = shift.totalPaidMinutes;
-                            if (shift.fullTimeOvertimeAction === 'Toil' || shift.partTimeOvertimeAction === 'Toil') {
-                                baseShift.toilAccrued += otMins;
-                            } else {
-                                // Pay as OT
-                                if (shift.shiftType.includes('Bank Holiday')) baseShift.otBH += otMins;
-                                else if (dayOfWeek >= 1 && dayOfWeek <= 5) baseShift.otMonFri += otMins;
-                                else if (dayOfWeek === 6) baseShift.otSat += otMins;
-                                else if (dayOfWeek === 0) baseShift.otSun += otMins;
-                            }
-                        }
-                        
-                        // 4. Early Start / Deductions
-                        if (shift.earlyStartMinutes > 0) {
-                            if (shift.earlyStartEnhancement === 'Overtime') {
-                                 // FT usually.
-                                 if (dayOfWeek >= 1 && dayOfWeek <= 5) baseShift.otMonFri += shift.earlyStartMinutes;
-                                 // Weekend early start OT?
-                            } else {
-                                baseShift.toilAccrued += shift.earlyStartMinutes;
-                            }
-                        }
-                        if (shift.lateStartAdjustment === 'Neg Toil') baseShift.toilUsed += shift.lateStartMinutes;
-                        if (shift.earlyFinishAdjustment === 'Neg Toil') baseShift.toilUsed += shift.earlyFinishMinutes;
-                        if (shift.lateStartAdjustment === 'AL') baseShift.annualLeaveUsed += shift.lateStartMinutes;
-                        if (shift.earlyFinishAdjustment === 'AL') baseShift.annualLeaveUsed += shift.earlyFinishMinutes;
-
-                        // SUM TOTALS
-                        totals.uhNight += baseShift.uhNight;
-                        totals.uhSat += baseShift.uhSat;
-                        totals.uhSun += baseShift.uhSun;
-                        totals.uhBH += baseShift.uhBH;
-                        totals.extraHoursWorked += baseShift.extraHoursWorked;
-                        totals.otMonFri += baseShift.otMonFri;
-                        totals.otSat += baseShift.otSat;
-                        totals.otSun += baseShift.otSun;
-                        totals.otBH += baseShift.otBH;
-                        totals.toilAccrued += baseShift.toilAccrued;
-                        totals.toilUsed += baseShift.toilUsed;
-                        totals.annualLeaveUsed += baseShift.annualLeaveUsed;
-                    }
-
-                    detailedPrintShifts.push(baseShift);
-                }
-
-                // --- RENDER TOTALS ---
-                const reportBody = document.getElementById('report-table-body');
-                reportBody.innerHTML = '';
-                const reportData = [
-                    { label: 'Unsocial Hrs (Sat)', value: totals.uhSat, color: 'text-orange-700' },
-                    { label: 'Unsocial Hrs (Sun)', value: totals.uhSun, color: 'text-orange-700' },
-                    { label: 'Unsocial Hrs (Night)', value: totals.uhNight, color: 'text-orange-700' },
-                    { label: 'Unsocial Hrs (Bank Hol)', value: totals.uhBH, color: 'text-orange-700' },
-                    { label: '---', value: 0, isDivider: true },
-                    { label: 'Overtime (Mon-Fri)', value: totals.otMonFri, color: 'text-red-700' },
-                    { label: 'Overtime (Sat)', value: totals.otSat, color: 'text-red-700' },
-                    { label: 'Overtime (Sun)', value: totals.otSun, color: 'text-red-700' },
-                    { label: 'Overtime (BH)', value: totals.otBH, color: 'text-red-700' },
-                    { label: 'Extra Time Worked (PT)', value: totals.extraHoursWorked, color: 'text-blue-700' },
-                    { label: '---', value: 0, isDivider: true },
-                    { label: 'TOIL Accrued', value: totals.toilAccrued, color: 'text-green-700' },
-                    { label: 'TOIL Used', value: totals.toilUsed, color: 'text-red-600' },
-                    { label: 'AL Used', value: totals.annualLeaveUsed, color: 'text-red-600' },
-                    { label: '---', value: 0, isDivider: true },
-                    { label: 'Total Paid Hours', value: totals.totalPaidMinutes, color: 'text-gray-900', isTotal: true },
-                ];
-                
-                reportData.forEach(item => {
-                    if (item.isDivider) {
-                        reportBody.innerHTML += `<tr><td colspan="3" class="h-4 border-b-2 border-gray-300"></td></tr>`;
-                    } else {
-                        reportBody.innerHTML += `<tr class="${item.isTotal ? 'bg-indigo-100 font-bold' : ''}">
-                            <td class="py-2 px-2 text-sm font-medium ${item.color}">${item.label}</td>
-                            <td class="py-2 px-2 text-sm font-bold text-right ${item.color}">${formatHours(item.value)}</td>
-                        </tr>`;
-                    }
-                });
-
-                // --- RENDER DETAIL LIST ---
-                const detailedList = document.getElementById('detailed-shift-list');
-                detailedList.innerHTML = '';
-                detailedPrintShifts.filter(s => s.shiftType !== 'None').forEach(s => {
-                    const paidText = `<span class="text-indigo-600 font-semibold">${formatHours(s.totalPaidMinutes)} Paid</span>`;
-                    const unsocialBadges = [];
-                    if(s.uhNight > 0) unsocialBadges.push('Night');
-                    if(s.uhSat > 0) unsocialBadges.push('Sat');
-                    if(s.uhSun > 0) unsocialBadges.push('Sun');
-                    
-                    const otTotal = s.otMonFri + s.otSat + s.otSun + s.otBH;
-                    
-                    detailedList.innerHTML += `
-                        <div class="p-3 rounded-xl border border-gray-300 bg-white shadow-sm">
-                            <p class="font-bold text-base text-gray-800">${new Date(s.date).toDateString()}</p>
-                            <p class="text-xs text-gray-600">${s.startTime} - ${s.finishTime} (${s.shiftType})</p>
-                            <div class="mt-1 text-xs space-x-2">
-                                ${paidText}
-                                ${otTotal > 0 ? `<span class="text-red-600 font-bold">${formatHours(otTotal)} OT</span>` : ''}
-                                ${s.extraHoursWorked > 0 ? `<span class="text-blue-600 font-bold">${formatHours(s.extraHoursWorked)} Extra</span>` : ''}
-                                ${unsocialBadges.length ? `<span class="text-purple-600">Unsocial: ${unsocialBadges.join(',')}</span>` : ''}
-                            </div>
-                        </div>`;
-                });
-
-                currentReportData = { totals, shiftsInMonth: detailedPrintShifts, monthName };
-                document.getElementById('report-title').textContent = `Monthly Shift Report for ${monthName}`;
-                document.getElementById('report-period').textContent = `Generated on ${new Date().toLocaleDateString()}`;
-                hideMessageBox();
-                document.getElementById('report-modal').classList.remove('hidden');
-
-            } catch (error) {
-                console.error(error);
-                hideMessageBox();
-                alert("Report Generation Error. See Console.");
-            }
-        }, 50);
+        // --- REPORT GENERATION ---
+        
+        window.generateReport = function() {
+    if (!userProfile.name || !userProfile.payrollNumber) {
+        showMessageBox("Error", "Please save your Name and Payroll Number in the profile section first.", true);
+        return;
     }
+    
+    showMessageBox("Generating Report", "Calculating totals for the month. Please wait...", false);
+
+    setTimeout(() => {
+        const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        
+        const shiftsInMonth = Object.keys(userShifts)
+            .filter(dateStr => dateStr.startsWith(yearMonthPrefix))
+            .sort()
+            .map(dateStr => userShifts[dateStr]);
+
+        const totals = {
+            uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
+            extraHoursWorked: 0, 
+            otMonFri: 0, otSat: 0, otSun: 0, otBH: 0, 
+            totalPaidMinutes: 0, 
+            toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0, 
+        };
+
+        const detailedPrintShifts = [];
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        // CHECK PART TIME STATUS (< 37.5 hours)
+        const isPartTime = userProfile.contractedHours < 37.5;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const shift = userShifts[dateStr];
+            const dateObj = new Date(dateStr);
+            const dayNamesArr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            const baseShift = {
+                date: dateStr,
+                weekday: dayNamesArr[dateObj.getDay()],
+                dayOfMonth: day,
+                shiftType: shift ? shift.shiftType : 'None',
+                startTime: shift ? shift.startTime : '',
+                finishTime: shift ? shift.finishTime : '',
+                notes: shift ? (shift.notes || '') : '',
+                uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
+                extraHours: 0, extraHoursWorked: 0,
+                otMonFri: 0, otSat: 0, otSun: 0, otBH: 0,
+                toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0
+            };
+
+            if (shift) {
+                const dayOfWeek = dateObj.getDay();
+                const totalPaidMinutes = shift.totalPaidMinutes || 0;
+                totals.totalPaidMinutes += totalPaidMinutes;
+
+                // --- LOGIC: UNSOCIAL HOURS ---
+                // We calculate these for EVERY shift.
+                // If Part Time: We KEEP them (add to totals).
+                // If Full Time: We only keep them if it's NOT an "Overtime" type (standard practice).
+                
+                let nightMins = shift.nightDuty || 0;
+                let satMins = (dayOfWeek === 6) ? totalPaidMinutes : 0;
+                let sunMins = (dayOfWeek === 0) ? totalPaidMinutes : 0;
+                let bhMins  = (shift.shiftType.includes('Bank Holiday')) ? totalPaidMinutes : 0;
+
+                // --- LOGIC: PAY CATEGORY (Standard vs OT vs Extra Hours) ---
+                
+                if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
+                    // 1. BASE HOURS: Standard
+                    totals.uhNight += nightMins; baseShift.uhNight += nightMins;
+                    totals.uhSat += satMins;     baseShift.uhSat += satMins;
+                    totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
+                    if (shift.shiftType === 'Bank Holiday') { totals.uhBH += bhMins; baseShift.uhBH += bhMins; }
+
+                    // 2. DEVIATIONS (Extra time worked)
+                    if (isPartTime && shift.extraTimeWorkedMinutes > 0) {
+                         if (shift.lateFinishEnhancement === 'Overtime') {
+                             baseShift.extraHoursWorked += shift.extraTimeWorkedMinutes;
+                             totals.extraHoursWorked += shift.extraTimeWorkedMinutes;
+                             baseShift.extraHours = baseShift.extraHoursWorked;
+                         } else if (shift.lateFinishEnhancement === 'Toil') {
+                             baseShift.toilAccrued += shift.extraTimeWorkedMinutes;
+                             totals.toilAccrued += shift.extraTimeWorkedMinutes;
+                         }
+                    } else if (!isPartTime) {
+                        // FULL TIME Deviation Logic
+                        if (shift.lateFinishEnhancement === 'Overtime' || shift.earlyStartEnhancement === 'Overtime') {
+                            let extraTime = 0;
+                            if (shift.lateFinishEnhancement === 'Overtime') extraTime += shift.extraTimeWorkedMinutes || 0;
+                            if (shift.earlyStartEnhancement === 'Overtime') extraTime += shift.earlyStartMinutes || 0;
+                            
+                            if (shift.shiftType === 'Bank Holiday') { baseShift.otBH += extraTime; totals.otBH += extraTime; }
+                            else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += extraTime; totals.otMonFri += extraTime; }
+                            else if (dayOfWeek === 6) { baseShift.otSat += extraTime; totals.otSat += extraTime; }
+                            else if (dayOfWeek === 0) { baseShift.otSun += extraTime; totals.otSun += extraTime; }
+                        }
+                    }
+                    
+                    if (shift.lateFinishEnhancement === 'Toil' && !isPartTime) { baseShift.toilAccrued += shift.extraTimeWorkedMinutes || 0; totals.toilAccrued += shift.extraTimeWorkedMinutes || 0; }
+                    if (shift.earlyStartEnhancement === 'Toil') { baseShift.toilAccrued += shift.earlyStartMinutes || 0; totals.toilAccrued += shift.earlyStartMinutes || 0; }
+                } 
+                else if (shift.shiftType === 'Overtime' || shift.shiftType === 'Bank Holiday Overtime') {
+                    // WHOLE SHIFT IS "OVERTIME" / ADDITIONAL SHIFT
+                    
+                    if (isPartTime) {
+                        // PART TIME LOGIC
+                        const ptExtra = shift.partTimeExtraMinutes || totalPaidMinutes; 
+                        const ptOt    = shift.partTimeOvertimeMinutes || 0;
+                        const ptAction = shift.partTimeOvertimeAction || 'Overtime'; 
+
+                        baseShift.extraHoursWorked += ptExtra;
+                        totals.extraHoursWorked += ptExtra;
+                        baseShift.extraHours = baseShift.extraHoursWorked;
+
+                        if (ptOt > 0) {
+                            if (ptAction === 'Toil') {
+                                baseShift.toilAccrued += ptOt;
+                                totals.toilAccrued += ptOt;
+                            } else {
+                                if (shift.shiftType.includes('Bank Holiday')) { baseShift.otBH += ptOt; totals.otBH += ptOt; }
+                                else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += ptOt; totals.otMonFri += ptOt; }
+                                else if (dayOfWeek === 6) { baseShift.otSat += ptOt; totals.otSat += ptOt; }
+                                else if (dayOfWeek === 0) { baseShift.otSun += ptOt; totals.otSun += ptOt; }
+                            }
+                        }
+                    } else {
+                        // --- UPDATED FULL TIME LOGIC ---
+                        // Check if they chose TOIL for this whole shift
+                        const ftAction = shift.fullTimeOvertimeAction || 'Overtime';
+                        
+                        if (ftAction === 'Toil') {
+                            // Map the WHOLE shift to TOIL
+                            baseShift.toilAccrued += totalPaidMinutes;
+                            totals.toilAccrued += totalPaidMinutes;
+                        } else {
+                            // Map to OVERTIME (Existing logic)
+                            if (shift.shiftType === 'Bank Holiday Overtime') { baseShift.otBH += totalPaidMinutes; totals.otBH += totalPaidMinutes; }
+                            else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += totalPaidMinutes; totals.otMonFri += totalPaidMinutes; }
+                            else if (dayOfWeek === 6) { baseShift.otSat += totalPaidMinutes; totals.otSat += totalPaidMinutes; }
+                            else if (dayOfWeek === 0) { baseShift.otSun += totalPaidMinutes; totals.otSun += totalPaidMinutes; }
+                        }
+                    }
+/*
+                    // For Overtime shifts, we always apply Unsocial Hours enhancements (Paid) 
+                    // regardless of whether the base hours were taken as Payment or TOIL.
+                    totals.uhNight += nightMins; baseShift.uhNight += nightMins;
+                    totals.uhSat += satMins;     baseShift.uhSat += satMins;
+                    totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
+*/
+                    if (shift.shiftType.includes('Bank Holiday')) { totals.uhBH += bhMins; baseShift.uhBH += bhMins; }
+                }
+                
+                // Common Deductions
+                if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
+                if (shift.earlyFinishAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.earlyFinishMinutes || 0; totals.toilUsed += shift.earlyFinishMinutes || 0; }
+                if (shift.lateStartAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.lateStartMinutes || 0; totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
+                if (shift.earlyFinishAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.earlyFinishMinutes || 0; totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+            }
+            detailedPrintShifts.push(baseShift);
+        }
+
+        // --- RENDER TABLE ---
+        const reportBody = document.getElementById('report-table-body');
+        reportBody.innerHTML = '';
+        
+        const reportData = [
+            { label: 'Unsocial Hrs (Sat)', value: totals.uhSat, color: 'text-orange-700', description: 'Total paid hours on Saturday.' },
+            { label: 'Unsocial Hrs (Sun)', value: totals.uhSun, color: 'text-orange-700', description: 'Total paid hours on Sunday.' },
+            { label: 'Unsocial Hrs (Night)', value: totals.uhNight, color: 'text-orange-700', description: 'Total night duty minutes (Mon-Fri 20:00+).' },
+            { label: 'Unsocial Hrs (Bank Hol)', value: totals.uhBH, color: 'text-orange-700', description: 'Total paid hours on Bank Holiday.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'Overtime (Mon-Fri)', value: totals.otMonFri, color: 'text-red-700', description: 'Total Mon-Fri hours recorded as Overtime.' },
+            { label: 'Overtime (Sat)', value: totals.otSat, color: 'text-red-700', description: 'Total Saturday hours recorded as Overtime.' },
+            { label: 'Overtime (Sun)', value: totals.otSun, color: 'text-red-700', description: 'Total Sunday hours recorded as Overtime.' },
+            { label: 'Overtime (BH)', value: totals.otBH, color: 'text-red-700', description: 'Total Bank Holiday hours recorded as Overtime.' },
+            { label: 'Extra Time Worked (Part Time)', value: totals.extraHoursWorked, color: 'text-blue-700', description: 'Additional hours worked by Part Time staff.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'TOIL Accrued (+ Hours)', value: totals.toilAccrued, color: 'text-green-700', description: 'Hours assigned to TOIL.' },
+            { label: 'TOIL Used (- Hours)', value: totals.toilUsed, color: 'text-red-600', description: 'Hours deducted from TOIL.' },
+            { label: 'Annual Leave Used (- Hours)', value: totals.annualLeaveUsed, color: 'text-red-600', description: 'Hours deducted from AL.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'GRAND TOTAL Paid Hours', value: totals.totalPaidMinutes, color: 'text-gray-900', description: 'Total paid hours for the month.', isTotal: true },
+        ];
+
+        reportData.forEach(item => {
+            if (item.isDivider) {
+                reportBody.innerHTML += `<tr><td colspan="3" class="h-4 border-b-2 border-gray-300"></td></tr>`;
+                return;
+            }
+            reportBody.innerHTML += `
+                <tr class="${item.isTotal ? 'bg-indigo-100 font-bold' : ''}">
+                    <td class="py-2 px-2 text-sm font-medium ${item.color}">${item.label}</td>
+                    <td class="py-2 px-2 text-sm font-bold text-right ${item.color}">${formatHours(item.value)}</td>
+                    <td class="py-2 px-2 text-xs text-gray-500 hidden md:table-cell">${item.description}</td>
+                </tr>
+            `;
+        });
+
+        // Detailed List Logic
+        const detailedList = document.getElementById('detailed-shift-list');
+        detailedList.innerHTML = '';
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        if (shiftsInMonth.length === 0) {
+            detailedList.innerHTML = '<p class="text-center text-gray-500 p-4">No shifts recorded for this month.</p>';
+        } else {
+            shiftsInMonth.forEach(shift => {
+                const dateObj = new Date(shift.date + 'T00:00:00');
+                const dayOfWeek = dayNames[dateObj.getDay()];
+                const paidHoursText = `<span class="text-indigo-600 font-semibold">${formatHours(shift.totalPaidMinutes)} Paid Hrs</span>`;
+                
+                let toilText = [];
+                if (shift.earlyStartMinutes > 0 && shift.earlyStartEnhancement === 'Toil') toilText.push(`+${formatHours(shift.earlyStartMinutes)} TOIL`);
+                if (shift.extraTimeWorkedMinutes > 0 && shift.lateFinishEnhancement === 'Toil') toilText.push(`+${formatHours(shift.extraTimeWorkedMinutes)} TOIL`);
+                if (shift.lateStartMinutes > 0 && shift.lateStartAdjustment === 'Neg Toil') toilText.push(`-${formatHours(shift.lateStartMinutes)} TOIL`);
+                
+                let otText = [];
+                // If Part Time, we call it Extra Hours in the logic, but usually people just say "Overtime" casually.
+                // But let's be specific in the list:
+                const otLabel = isPartTime ? 'Extra Hrs' : 'OT';
+                
+                if (shift.shiftType.includes('Overtime')) otText.push(`${formatHours(shift.totalPaidMinutes)} ${otLabel}`);
+                if (shift.earlyStartEnhancement === 'Overtime') otText.push(`+${formatHours(shift.earlyStartMinutes)} ${otLabel}`);
+                if (shift.lateFinishEnhancement === 'Overtime') otText.push(`+${formatHours(shift.extraTimeWorkedMinutes)} ${otLabel}`);
+
+                let enhancements = [];
+                if (shift.nightDuty > 0 && (shift.shiftType === 'Standard' || isPartTime)) enhancements.push('Night Duty');
+                if ((dateObj.getDay()===6 || dateObj.getDay()===0) && (shift.shiftType === 'Standard' || isPartTime)) enhancements.push('Weekend Hrs');
+                
+                let notesHtml = shift.notes ? `<div class="mt-1 text-xs text-gray-500 italic border-t border-gray-100 pt-1">Note: ${shift.notes}</div>` : '';
+
+                detailedList.innerHTML += `
+                    <div class="p-3 rounded-xl border border-gray-300 bg-white shadow-sm">
+                        <p class="font-bold text-base text-gray-800">${dateObj.toDateString()} (${dayOfWeek})</p>
+                        <p class="text-xs text-gray-600"><strong>${shift.shiftType}</strong>: ${shift.startTime} - ${shift.finishTime}</p>
+                        <div class="mt-1 text-xs space-x-3">${paidHoursText} ${toilText.length?`<span class="text-green-700">${toilText.join(' / ')}</span>`:''} ${otText.length?`<span class="text-blue-600">${otText.join(' / ')}</span>`:''}
+                            ${enhancements.length > 0 ? `<span class="text-purple-600">${enhancements.join(', ')}</span>` : ''}
+                        </div>
+                        ${notesHtml}
+                    </div>
+                `;
+            });
+        }
+
+        currentReportData = { totals, shiftsInMonth: detailedPrintShifts, monthName };
+        
+        document.getElementById('report-title').textContent = `Monthly Shift Report for ${monthName}`;
+        document.getElementById('report-period').textContent = `Generated on ${new Date().toLocaleDateString('en-US', { dateStyle: 'medium' })}`;
+        
+        hideMessageBox();
+        document.getElementById('report-modal').classList.remove('hidden');
+
+    }, 50);
+}
 
 window.executePrintReport = function() {
     const { shiftsInMonth, monthName } = currentReportData;
