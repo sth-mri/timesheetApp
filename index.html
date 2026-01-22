@@ -56,7 +56,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv17_59_test</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_60_final</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -121,7 +121,7 @@
             </button>
 
             <!-- Info Button -->
-            <button onclick="openInfoModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-3 rounded-lg shadow-sm transition duration-200 ease-in-out flex items-center gap-2 text-sm" title="How to use">
+            <button onclick="openInfoModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-xl shadow-md transition duration-200 ease-in-out flex items-center gap-2 text-sm" title="How to use">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
                 </svg>
@@ -154,7 +154,7 @@
                 <button onclick="hardReset()" class="
                     bg-red-800 hover:bg-red-900 text-white font-bold 
                     py-2 px-4 rounded-lg shadow-lg transition duration-150 ease-in-out">
-                    <span>⚠ Factory Reset (Delete All Data)</span>
+                    <span>⚠ Delete All Local Data</span>
                 </button>
             </div>
         </div>
@@ -263,19 +263,15 @@
             </svg>
             Send Shift Data
         </button>
-        <!-- EXISTING PRINT BUTTON -->
-        <button onclick="showPrintInstructions()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-1.5 px-3 rounded transition shadow-md">
-            Print Report (PDF)
-        </button>
+       
 
-
- <div class="flex space-x-3">
+		<div class="flex space-x-3">
         <button onclick="closeReportModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1.5 px-3 rounded transition">
             Close
         </button>
 
 
-    </div>
+		</div>
 </div>
 		
         <div id="report-content" class="space-y-4">
@@ -296,24 +292,6 @@
     </div>
 </div>
 	
-<div id="instruction-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
-    <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl p-6 transform transition-all duration-300">
-        <h3 class="text-2xl font-bold text-gray-800 mb-4" id="instruction-modal-title">Print Instructions</h3>
-        
-        <div id="instruction-content" class="text-gray-700 space-y-4 mb-6">
-            </div>
-
-        <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button onclick="document.getElementById('instruction-modal').classList.add('hidden')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
-                Cancel
-            </button>
-            <button onclick="handlePrintButtonClick()" id="modal-print-button" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">
-                Print
-            </button>
-        </div>
-    </div>
-</div>
-
 <!-- INFO MODAL (NEW) -->
 <div id="info-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
     <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl p-6 transform transition-all duration-300">
@@ -341,6 +319,16 @@
     <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl p-6 flex flex-col">
         <h3 class="text-2xl font-bold text-gray-800 mb-2">Data to send to sthMriShiftData:</h3>
 
+<!-- Actions -->
+        <div class="flex justify-start space-x-3 pt-4 border-t">
+            <button onclick="sendDataToGoogle()" id="btn-send-gas" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">
+                Send Now
+            </button>
+			<button onclick="document.getElementById('send-data-modal').classList.add('hidden')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
+                Cancel
+            </button>
+        </div>
+
         <!-- Preview Table -->
         <div class="overflow-auto flex-grow border border-gray-200 rounded-lg mb-4 bg-gray-50 p-2">
             <table class="min-w-full text-xs text-left text-gray-600">
@@ -367,20 +355,11 @@
         <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700">Google Apps Script Web App URL</label>
             <p id="xyz" class="mt-1 text-xs text-gray-400 font-mono break-all bg-gray-50 p-2 rounded border border-gray-200">
-		<!-- 	https://script.google.com/macros/s/AKfycbwJo54bEcYPAQSI28Ti4UPGMFiP7qrtw8MMVlGzgv9PIclVboA9dprVWx94dVU3YARE/exec  -->
-			https://script.google.com/macros/s/AKfycbxE6_ZYJ7HcaFs1cyZbXirX-YOlMTGULSIextasIJorouy3Aw-eUGpKwqENra0yCfPc/exec
+				https://script.google.com/macros/s/AKfycbxE6_ZYJ7HcaFs1cyZbXirX-YOlMTGULSIextasIJorouy3Aw-eUGpKwqENra0yCfPc/exec
             </p>
         </div>
 
-        <!-- Actions -->
-        <div class="flex justify-end space-x-3 pt-4 border-t">
-            <button onclick="document.getElementById('send-data-modal').classList.add('hidden')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
-                Cancel
-            </button>
-            <button onclick="sendDataToGoogle()" id="btn-send-gas" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">
-                Send Now
-            </button>
-        </div>
+        
     </div>
 </div>
 
@@ -395,20 +374,10 @@
         // Standard shift times
         const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
         const DEFAULT_END_TIME_MINUTES = timeToMinutes('20:30');
-        const NIGHT_DUTY_START_MINUTES = timeToMinutes('20:00');
-        const NIGHT_DUTY_END_MINUTES = timeToMinutes('20:30');
 
         // --- LOCAL STORAGE KEY CONSTANTS ---
         const PROFILE_KEY = 'userProfile';
         const SHIFTS_KEY = 'userShifts';
-
-		// Detect if the user is on an Apple device
-		const isAppleDevice = /Macintosh|Mac OS|iPhone|iPad|iPod/.test(navigator.userAgent);
-
-		// This will store the active print scale factor
-		let PRINT_SCALE_FACTOR;
-			const APPLE_SCALE = 0.73;
-			const DEFAULT_SCALE = 1.0;
 
         // --- UTILITY FUNCTIONS ---
         
@@ -427,7 +396,6 @@ window.hardReset = function() {
         // Remove specific keys
         localStorage.removeItem('userShifts');
         localStorage.removeItem('userProfile');
-        localStorage.removeItem('printScaleFactor');
         
         // Or use localStorage.clear() to wipe everything for this domain
         
@@ -469,23 +437,6 @@ function detectDeviceAndBrowser() {
     }
 
     return `System: ${device}, Browser: ${browser}`;
-}
-
-function classifyDeviceForInstructions() {
-    const userAgent = navigator.userAgent;
-    const isWindows = /Windows/i.test(userAgent);
-    const isAndroid = /Android/i.test(userAgent);
-    const isMacOriOS = /Macintosh|Mac OS X|iPhone|iPad|iPod/i.test(userAgent);
-
-    if (isMacOriOS) {
-        return 'Apple'; 
-    } else if (isAndroid) {
-        return 'Android';
-    } else if (isWindows) {
-        return 'WindowsPC';
-    } else {
-        return 'OtherPC'; 
-    }
 }
 		
         // Helper: Convert "HH:MM" string to minutes from midnight
@@ -566,18 +517,6 @@ function formatHours(minutes) {
         // --- LOCAL STORAGE DATA HANDLING ---
 
         function loadInitialData() {
-    const storedScale = localStorage.getItem('printScaleFactor');
-    if (storedScale) {
-        PRINT_SCALE_FACTOR = parseFloat(storedScale);
-    } else {
-        PRINT_SCALE_FACTOR = isAppleDevice ? APPLE_SCALE : DEFAULT_SCALE;
-    }
-
-    const scaleDisplayElement = document.getElementById('current-print-scale');
-    if (scaleDisplayElement) {
-        scaleDisplayElement.value = (PRINT_SCALE_FACTOR * 100).toFixed(0);
-    }
-			
             const storedProfile = localStorage.getItem(PROFILE_KEY);
             if (storedProfile) {
                 try {
@@ -915,32 +854,6 @@ function formatHours(minutes) {
                 renderCalendar();
             }
         }
-
-        // --- PRINT SCALE MANAGEMENT --- 
-        window.changePrintScale = function() {
-            const scaleInput = document.getElementById('current-print-scale');
-            let newScalePercent = parseInt(scaleInput.value, 10);
-
-            if (isNaN(newScalePercent) || newScalePercent < 10 || newScalePercent > 200) {
-                alert("Please enter a valid percentage between 10 and 200.");
-                scaleInput.value = (PRINT_SCALE_FACTOR * 100).toFixed(0);
-                return;
-            }
-            PRINT_SCALE_FACTOR = newScalePercent / 100;
-            localStorage.setItem('printScaleFactor', PRINT_SCALE_FACTOR.toFixed(2));
-            alert(`Print scale set to ${newScalePercent}%.`);
-        }
-
-        window.resetPrintScale = function() {
-            const defaultScale = isAppleDevice ? APPLE_SCALE : DEFAULT_SCALE;
-            PRINT_SCALE_FACTOR = defaultScale;
-            localStorage.removeItem('printScaleFactor');
-
-            const scaleInput = document.getElementById('current-print-scale');
-            scaleInput.value = (defaultScale * 100).toFixed(0);
-            alert(`Print scale reset to default.`);
-        }
-        
 
         // --- CORE CALCULATIONS (UPDATED WITH WEEKLY STATUS) ---
         
@@ -1508,264 +1421,7 @@ function formatHours(minutes) {
 }
 
 
-window.executePrintReport = function() {
-    const { shiftsInMonth, monthName } = currentReportData;
-    const profile = userProfile;
-    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-    if (!monthName) {
-        alert("Please generate the report first before attempting to print.");
-        return;
-    }
-
-    const printScaleStyle = `
-        @page { 
-            size: A4 portrait;
-            margin: 10mm;
-        }
-        body { 
-            transform: scale(${PRINT_SCALE_FACTOR}); 
-            transform-origin: top left; 
-            -webkit-print-color-adjust: exact; 
-            color-adjust: exact;
-            margin: 0;
-            padding: 0;
-        }
-        * { box-sizing: border-box; }
-        .print-page {
-            max-width: 780px; 
-            margin: 0 auto;
-            padding: 5px;
-            font-family: 'Inter', sans-serif;
-            font-size: 9pt;
-            color: #333;
-        } 
-        th, td { -webkit-print-color-adjust: exact; color-adjust: exact; }
-        .header-row { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; } 
-        h1 { font-size: 1.2em; font-weight: bold; text-align: center; margin-bottom: 10px; }
-        .details { margin-bottom: 10px; line-height: 1.4; } 
-        .sub-heading { font-weight: bold; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
-        .instructions { margin-left: 10px; margin-bottom: 15px; font-size: 0.9em; } 
-        .instructions li { margin-bottom: 5px; } 
-        table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.8em; } 
-        th { background-color: #ddd; font-weight: bold; padding: 4px 2px; border: 1px solid #000; text-align: center; vertical-align: middle; line-height: 1.1; } 
-        td { border-right: 1px solid #000; border-bottom: 1px dashed #ccc; padding: 2px; text-align: center; vertical-align: top; }
-        td:first-child { border-left: 1px solid #000; } 
-        tr:last-child td { border-bottom: 1px solid #000; }
-        .fill-line { display: inline-block; border-bottom: 1px solid #000; width: 250px; text-align: left; padding: 0 5px; }
-        .blank-signature-line { display: inline-block; border-bottom: 1px solid #000; text-align: left; padding: 0 5px; }
-    `;
-
-    const tableRows = shiftsInMonth.map(shift => {
-        const day = shift.dayOfMonth;
-        const topBorderStyle = day === 1 ? 'border-top: 1px solid #000;' : '';
-
-        return `
-            <tr>
-                <td style="width: 5%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${day}</td>
-                <td style="width: 5%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${shift.weekday}</td>
-                <td style="width: 8%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${shift.startTime}</td>
-                <td style="width: 8%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${shift.finishTime}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.uhSat)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.uhSun)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.uhNight)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.uhBH)}</td>
-                <td style="width: 8%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.extraHours)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.otMonFri)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.otSat)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.otSun)}</td>
-                <td style="width: 6%; padding: 2px; text-align: center; border-right: 1px solid #000; border-bottom: 1px dashed #ccc; ${topBorderStyle}">${formatHoursForPrint(shift.otBH)}</td>
-            </tr>
-        `;
-    }).join('');
-
-    const totalRow = `
-        <tr style="font-weight: bold; background-color: #ddd;">
-            <td colspan="4" style="text-align: right; border: 1px solid #000; padding: 4px 2px;">TOTALS:</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.uhSat)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.uhSun)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.uhNight)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.uhBH)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.extraHoursWorked)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.otMonFri)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.otSat)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.otSun)}</td>
-            <td style="border: 1px solid #000; padding: 4px 2px;">${formatHoursForPrint(currentReportData.totals.otBH)}</td>
-        </tr>
-    `;
-
-    const printContent = `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <title>Shift Report - ${monthName}</title>
-            <style>${printScaleStyle}</style>
-        </head>
-        <body>
-            <div class="print-page">
-			<div class="header-row" style="display: flex; justify-content: space-between; align-items: center;">
-				<div style="width: auto; flex-grow: 1; text-align: left;">
-					<h1 style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 1.1em; margin: 0;">UNSOCIAL HOURS & OVERTIME CLAIM FORM - MONTHLY PAID STAFF (non-medical)</h1>
-				</div>
-				<div style="width: 160px; flex-shrink: 0; text-align: right; margin-left: 10px;">
-					<img src="https://raw.githubusercontent.com/novacustard-sthmri/timesheet/main/STH_logo.png" alt="STH Logo" style="max-width: 150px; height: auto;">
-					<p style="font-size: 8px; margin-top: 2px; color: #555;">STH NHS Foundation Trust Logo</p>
-				</div>
-			</div>
-                <div class="details" style="font-size: 0.9em;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="display: inline-block; white-space: nowrap;">
-                            <span style="font-weight: bold; padding-right: 5px;">Name:</span>
-                            <span class="fill-line">${profile.name}</span>
-                        </span>
-                        <span style="display: inline-block; white-space: nowrap;">
-                            <span style="font-weight: bold; padding-right: 5px;">Dept:</span>
-                            <span class="fill-line"> MIMP </span>
-                        </span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                        <span style="display: inline-block; white-space: nowrap;">
-                            <span style="font-weight: bold; padding-right: 5px;">Assignment No:</span>
-                            <span class="fill-line">${profile.payrollNumber}</span>
-                        </span>
-                        <span style="display: inline-block; white-space: nowrap;">
-                            <span style="display: inline-block; text-align: right; font-weight: bold;">Claim for the month of:</span>
-                            <span class="fill-line">${monthName}</span>
-                        </span>
-                    </div>
-                </div>
-                <ul class="instructions">
-                    <li>ONLY hours attracting payments over and above basic hours need recording on this claim form.</li>
-                    <li>All hours claimed must be exclusive of meal breaks and time off in lieu (TOIL).</li>
-                    <li>Claims must be received by Payroll Services by the 4th of the following month.</li>
-                </ul>
-                <table>
-                    <thead>
-                        <tr style="background-color: #ddd;">
-                            <th rowspan="2" style="width: 5%;">Day</th>
-                            <th rowspan="2" style="width: 5%;">D/W</th>
-                            <th rowspan="2" style="width: 8%;">Shift Start (time)</th>
-                            <th rowspan="2" style="width: 8%;">Shift End (time)</th>
-                            <th colspan="4">Unsocial Hours Enhancements</th>
-                            <th rowspan="2" style="width: 8%;">Extra Hours (20:30>)</th>
-                            <th colspan="4">Overtime</th>
-                        </tr>
-                        <tr style="background-color: #ddd;">
-                            <th style="width: 6%;">Sat</th>
-                            <th style="width: 6%;">Sun</th>
-                            <th style="width: 6%;">Night</th>
-                            <th style="width: 6%;">Bank Hol</th>
-                            <th style="width: 6%;">Mon-Fri</th>
-                            <th style="width: 6%;">Sat</th>
-                            <th style="width: 6%;">Sun</th>
-                            <th style="width: 6%;">Bank Hol</th>
-                        </tr>
-                    </thead>
-                    <tbody>${tableRows}${totalRow}</tbody>
-                </table>
-                <h2 class="sub-heading">Declaration</h2>
-                <div class="details" style="font-size: 0.9em;">
-                    <p style="margin-bottom: 15px;">I certify that the above claim is correct and in accordance with my attendance record.</p>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
-                        <div style="width: 65%; text-align: left;">
-                            <span style="font-weight: bold; padding-right: 5px;">Employee Signature:</span>
-                            <span class="blank-signature-line" style="width: 230px;"></span>
-                        </div>
-                        <div style="width: 35%; text-align: center;">
-                            <span style="font-weight: bold; padding-right: 5px;">Date:</span>
-                            <span class="blank-signature-line" style="width: 120px;"></span>
-                        </div>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 25px;">
-                        <div style="width: 65%; text-align: left;">
-                            <span style="font-weight: bold; padding-right: 5px;">Authorising Signature (manager):</span>
-                            <span class="blank-signature-line" style="width: 210px;"></span>
-                        </div>
-                        <div style="width: 35%; text-align: center;">
-                            <span style="font-weight: bold; padding-right: 5px;">Date:</span>
-                            <span class="blank-signature-line" style="width: 120px;"></span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </body>
-        </html>
-    `;
-
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(printContent);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
-}
-
-window.showPrintInstructions = function() {
-    if (!currentReportData.monthName) {
-        alert("Please generate the report first before attempting to print.");
-        return;
-    }
-    
-    const deviceType = classifyDeviceForInstructions();
-    const modalTitle = document.getElementById('instruction-modal-title');
-    const contentDiv = document.getElementById('instruction-content');
-    let titleText = "Print Instructions";
-    let instructionsHtml = '';
-
-    const commonSteps = `
-        <p class="text-sm font-semibold mt-4 text-gray-800">Common Steps for Android/Apple/Windows devices:</p>
-        <ul class="list-disc list-inside space-y-1 ml-4 text-sm">
-            <li><strong>Layout/Orientation:</strong> Ensure 'Portrait' is selected</li>
-			<li><strong>Page Size:</strong> Select A4 or ISO A4</li>
-            <li><strong>Print Preview Check:</strong> Check the timesheet fits on one page - adjust print scale if necessary</li>
-        </ul>
-    `;
-    
-    const appleInstruction = `
-        <h4 class="font-bold text-lg text-indigo-700">Apple Devices (Mac/iPhone/iPad)</h4>
-        <p class="text-sm">Apple devices sometimes apply an incorrect default scale.</p>
-        <ul class="list-disc list-inside space-y-1 ml-4 text-sm font-medium">
-            <li><strong>Scale:</strong> Adjust 'Scale' until the print preview shows a single page (73%)</li>
-			<li><strong>Select Destination:</strong> Choose Share to send via email or save to a folder</li>
-        </ul>
-    `;
-
-    const windowsInstruction = `
-        <h4 class="font-bold text-lg text-indigo-700">Windows PC</h4>
-        <p class="text-sm">The report is optimized for a full-page width in Portrait mode.</p>
-        <ul class="list-disc list-inside space-y-1 ml-4 text-sm">
-            <li><strong>Scale:</strong> Ensure 'Default', '100%', or 'Fit to page' is selected.</li>
-        </ul>
-    `;
-
-    const androidInstruction = `
-        <h4 class="font-bold text-lg text-indigo-700">Android Mobile/Tablet</h4>
-        <p class="text-sm">Mobile printing can vary by device.</p>
-        <ul class="list-disc list-inside space-y-1 ml-4 text-sm">
-            <li><strong>Scale:</strong> Use 'Fit to Page' or check the scale is close to 100%.</li>
-        </ul>
-    `;
-
-    if (deviceType === 'Apple') {
-        titleText = "Apple Print Instructions";
-        instructionsHtml = appleInstruction + commonSteps;
-    } else if (deviceType === 'Android') {
-        titleText = "Android Print Instructions";
-        instructionsHtml = androidInstruction + commonSteps;
-    } else { 
-        titleText = "PC Print Instructions";
-        instructionsHtml = windowsInstruction + commonSteps;
-    }
-
-    modalTitle.textContent = titleText;
-    contentDiv.innerHTML = instructionsHtml;
-    document.getElementById('instruction-modal').classList.remove('hidden');
-}
-
-window.handlePrintButtonClick = function() {
-    executePrintReport(); 
-    document.getElementById('instruction-modal').classList.add('hidden');
-    closeReportModal();
-}
 
 window.closeReportModal = function() {
     document.getElementById('report-modal').classList.add('hidden');
@@ -1840,13 +1496,6 @@ function getPayloadData() {
     };
 }
 
-function copyJSONToClipboard() {
-    const data = getPayloadData();
-    navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(() => {
-        alert("JSON data copied to clipboard!");
-    });
-}
-
 function sendDataToGoogle() {
     // This grabs the text inside the element with id="xyz"
     const url = document.getElementById('xyz').innerText.trim();
@@ -1855,8 +1504,6 @@ function sendDataToGoogle() {
         alert("Error: Webhook URL not found in HTML (id='xyz').");
         return;
     }
-    
-    localStorage.setItem('gasWebhookUrl', url);
     
     const btn = document.getElementById('btn-send-gas');
     const originalText = btn.innerText;
@@ -1922,13 +1569,9 @@ function sendDataToGoogle() {
         window.closeReportModal = closeReportModal;
         window.editProfile = editProfile; 
         window.clearAllShifts = clearAllShifts; 
-        window.showPrintInstructions = showPrintInstructions; 
-        window.handlePrintButtonClick = handlePrintButtonClick; 
-        window.executePrintReport = executePrintReport; 
         window.checkCustomContractedHours = checkCustomContractedHours;
         window.prepareAndShowSendDialog = prepareAndShowSendDialog;
         window.sendDataToGoogle = sendDataToGoogle;
-        window.copyJSONToClipboard = copyJSONToClipboard;
     </script>
 </body>
 </html>
