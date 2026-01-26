@@ -584,7 +584,7 @@ function formatHours(minutes) {
                     userProfile = {
                         name: parsedProfile.name || '',
                         payrollNumber: parsedProfile.payrollNumber || '',
-                        userEmail: parsedProfile.userEmail || 'username@email.com',
+                        userEmail: parsedProfile.userEmail || 'username@emailaddr',
                         contractedHours: parseFloat(parsedProfile.contractedHours) || 37.5
                     };
                     
@@ -611,8 +611,8 @@ function formatHours(minutes) {
                     console.error("Error parsing stored profile:", e);
                 }
             } else {
-                userProfile.userEmail = 'username@email.com';
-                document.getElementById('userEmail').value = 'username@email.com';
+                userProfile.userEmail = 'username@emailaddr';
+                document.getElementById('userEmail').value = 'username@emailaddr';
                 document.getElementById('contractedHoursSelect').value = '37.5';
             }
             
@@ -663,7 +663,7 @@ function formatHours(minutes) {
         window.editProfile = function() {
             document.getElementById('userName').value = userProfile.name || '';
             document.getElementById('payrollNumber').value = userProfile.payrollNumber || '';
-            document.getElementById('userEmail').value = userProfile.userEmail || 'username@email.com';
+            document.getElementById('userEmail').value = userProfile.userEmail || 'username@emailaddr';
             
             const hours = userProfile.contractedHours;
             const select = document.getElementById('contractedHoursSelect');
