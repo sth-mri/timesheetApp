@@ -56,7 +56,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv18_60_final</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv19_60_final_clean</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -1141,8 +1141,8 @@ function formatHours(minutes) {
         }
         
         // --- REPORT GENERATION ---
-        
-		window.generateReport = function() {
+
+window.generateReport = function() {
     if (!userProfile.name || !userProfile.payrollNumber) {
         showMessageBox("Error", "Please save your Name and Payroll Number in the profile section first.", true);
         return;
@@ -1269,7 +1269,12 @@ function formatHours(minutes) {
                     
                     if (isPartTime) {
                         // PART TIME LOGIC
-                        const ptExtra = shift.partTimeExtraMinutes || totalPaidMinutes; 
+                        
+                        // FIX APPLIED HERE:
+                        // Check if partTimeExtraMinutes is defined (even if 0). 
+                        // If it is undefined, default to totalPaidMinutes.
+                        const ptExtra = (shift.partTimeExtraMinutes !== undefined) ? shift.partTimeExtraMinutes : totalPaidMinutes;
+                        
                         const ptOt    = shift.partTimeOvertimeMinutes || 0;
                         const ptAction = shift.partTimeOvertimeAction || 'Overtime'; 
 
@@ -1419,7 +1424,6 @@ function formatHours(minutes) {
 
     }, 50);
 }
-
 
 
 
