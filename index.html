@@ -631,6 +631,8 @@ function formatHours(minutes) {
             const name = document.getElementById('userName').value.trim();
             const payrollNumber = document.getElementById('payrollNumber').value.trim();
             const userEmail = document.getElementById('userEmail').value.trim();
+            
+            // Handle Contracted Hours Logic
             const hoursSelect = document.getElementById('contractedHoursSelect').value;
             let contractedHours;
 
@@ -641,10 +643,24 @@ function formatHours(minutes) {
                 contractedHours = parseFloat(hoursSelect) || 37.5;
             }
             
-            if (!name || !payrollNumber) {
-                showMessageBox("Input Required", "Please enter both your Name and Payroll Number before saving.", true);
+            // --- VALIDATION START ---
+
+            // 1. Check if fields are empty
+            if (!name || !payrollNumber || !userEmail) {
+                showMessageBox("Input Required", "Please enter your Name, Payroll Number, and Email Address before saving.", true);
                 return;
             }
+
+            // 2. Check for Valid Email Format
+            // This Regex checks for: [characters]@[characters].[characters]
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            if (!emailRegex.test(userEmail)) {
+                showMessageBox("Invalid Email", "The email address entered is invalid. Please check for typos (e.g., missing '@' or '.com').", true);
+                return;
+            }
+
+            // --- VALIDATION END ---
 
             userProfile = {
                 name: name,
