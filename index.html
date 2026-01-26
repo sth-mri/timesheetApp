@@ -1,3 +1,4 @@
+<!-- START OF FILE ai_studio_code (7).html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -56,7 +57,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv19_60_final_clean</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv19_63_final</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -700,18 +701,26 @@ function formatHours(minutes) {
                     // Check if times are different from standard
                     const isNonStandard = shift.startTime !== '07:20' || shift.finishTime !== '20:30';
                     
-                    // --- NEW LOGIC START ---
-                    // If Part Time (< 37.5h) and shift is Overtime, display "Extra Hours"
+                    // --- UPDATED LOGIC START ---
                     let displayLabel = shift.shiftType;
                     const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+                    const isPartTime = contractHrs < 37.5;
                     
-                    if (contractHrs < 37.5 && displayLabel === 'Overtime') {
-                        displayLabel = 'Extra Hours';
+                    // If Part Time and the shift type is Overtime
+                    if (isPartTime && displayLabel === 'Overtime') {
+                        // Check if this specific shift triggered enhanced overtime (crossed 37.5h)
+                        // If partTimeOvertimeMinutes > 0, they have crossed the threshold -> Display "Overtime"
+                        // If partTimeOvertimeMinutes is 0 or undefined, they are just over contract -> Display "Extra Hours"
+                        if ((shift.partTimeOvertimeMinutes || 0) > 0) {
+                            displayLabel = 'Overtime';
+                        } else {
+                            displayLabel = 'Extra Hours';
+                        }
                     }
+                    // --- UPDATED LOGIC END ---
                     
                     const titleText = displayLabel + (isNonStandard ? ' !' : '');
-                    // --- NEW LOGIC END ---
-
+                    
                     shiftInfoHtml = `
                         <div class="mt-1 text-xs font-bold text-gray-900 leading-tight">${titleText}</div>
                         <div class="text-[11px] font-medium text-gray-600">${shift.startTime}-${shift.finishTime}</div>
@@ -1282,6 +1291,36 @@ window.generateReport = function() {
                         totals.extraHoursWorked += ptExtra;
                         baseShift.extraHours = baseShift.extraHoursWorked;
 
+                        // --- NEW FIX START --- 
+                        // Add Unsocial Hours for the "Extra Hours" portion (Plain Time)
+                        if (ptExtra > 0) {
+                            // 1. Saturday
+                            if (dayOfWeek === 6) {
+                                const addSat = Math.min(satMins, ptExtra);
+                                baseShift.uhSat += addSat;
+                                totals.uhSat += addSat;
+                            }
+                            // 2. Sunday
+                            else if (dayOfWeek === 0) {
+                                const addSun = Math.min(sunMins, ptExtra);
+                                baseShift.uhSun += addSun;
+                                totals.uhSun += addSun;
+                            }
+                            // 3. Nights
+                            if (nightMins > 0) {
+                                const addNight = Math.min(nightMins, ptExtra);
+                                baseShift.uhNight += addNight;
+                                totals.uhNight += addNight;
+                            }
+                            // 4. Bank Holiday (Plain Time portion)
+                            if (shift.shiftType === 'Bank Holiday Overtime') {
+                                const addBH = Math.min(totalPaidMinutes, ptExtra); 
+                                baseShift.uhBH += addBH;
+                                totals.uhBH += addBH;
+                            }
+                        }
+                        // --- NEW FIX END ---
+
                         if (ptOt > 0) {
                             if (ptAction === 'Toil') {
                                 baseShift.toilAccrued += ptOt;
@@ -1314,13 +1353,8 @@ window.generateReport = function() {
                         }
                     }
 
-                    // NOTE: Standard OT shifts (non-BH) still attract Paid Unsocial Hours on top of the OT payment.
-                    // BH Overtime shifts do NOT attract uhBH (as per requirement: "recorded just as Bank Holiday Overtime").
-                    if (shift.shiftType !== 'Bank Holiday Overtime') {
-                         totals.uhNight += nightMins; baseShift.uhNight += nightMins;
-                         totals.uhSat += satMins;     baseShift.uhSat += satMins;
-                         totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
-                    }
+                    // NOTE: Standard OT shifts (non-BH) DO NOT attract Paid Unsocial Hours on top of the OT payment.
+                    // This logic was removed to fix the Sunday Overtime double counting.
                 }
                 
                 // Common Deductions
