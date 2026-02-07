@@ -1141,28 +1141,33 @@ function formatHours(minutes) {
     }
 
     // Standard / BH Deviations
-    if (shiftType === 'Standard' || shiftType === 'Bank Holiday') {
-        if (enhancements.earlyStartMinutes > 0) {
-            hasDeviations = true;
-            selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
-                [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
-        }
-        if (enhancements.extraTimeWorkedMinutes > 0) {
-            hasDeviations = true;
-            selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
-                [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
-        }
-        if (enhancements.lateStartMinutes > 0) {
-            hasDeviations = true;
-            selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
-                [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
-        }
-        if (enhancements.earlyFinishMinutes > 0) {
-            hasDeviations = true;
-            selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
-                [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
-        }
-    }
+    // Standard / BH Deviations
+            if (shiftType === 'Standard' || shiftType === 'Bank Holiday') {
+                // 1. Early Start (Priority 1)
+                if (enhancements.earlyStartMinutes > 0) {
+                    hasDeviations = true;
+                    selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
+                        [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+                }
+                // 2. Late Start (Priority 2)
+                if (enhancements.lateStartMinutes > 0) {
+                    hasDeviations = true;
+                    selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
+                        [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+                }
+                // 3. Late Finish (Priority 3)
+                if (enhancements.extraTimeWorkedMinutes > 0) {
+                    hasDeviations = true;
+                    selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
+                        [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+                }
+                // 4. Early Finish (Priority 4)
+                if (enhancements.earlyFinishMinutes > 0) {
+                    hasDeviations = true;
+                    selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
+                        [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+                }
+            }
 
     selectorContainer.classList.toggle('hidden', !hasDeviations);
 
@@ -1529,7 +1534,7 @@ window.generateReport = function() {
         document.getElementById('report-period').textContent = `Generated on ${new Date().toLocaleDateString('en-US', { dateStyle: 'medium' })}`;
         
         hideMessageBox();
-        document.getElementById('report-modal').classList.remove('hidden');
+        prepareAndShowSendDialog();
 
     }, 50);
 }
