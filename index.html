@@ -47,6 +47,10 @@
         
         /* Bank Holiday (Standard Hours) */
         .shift-bank-holiday { background-color: #e2e8f0; } /* Light Grey (Gray 200) */
+		
+		/* Study Leave / Other */
+		.shift-study-leave { background-color: #cffafe; } /* Light Cyan (Cyan 100) */
+		
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -57,7 +61,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheetGASv21_64_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv22_64_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -215,6 +219,11 @@
                             <input type="radio" name="shiftType" value="Bank Holiday Overtime" class="form-radio text-purple-600 h-4 w-4" onchange="calculateEnhancements()">
                             <span class="ml-2 text-gray-700">Bank Holiday Overtime</span>
                         </label>
+						<!-- Inside the shift-modal form, shiftType radio group -->			
+						<label class="inline-flex items-center">
+							<input type="radio" name="shiftType" value="Study Leave/Other" class="form-radio text-cyan-600 h-4 w-4" onchange="calculateEnhancements()">
+							<span class="ml-2 text-gray-700">Study Leave/Other</span>
+						</label>
                     </div>
                 </div>
 
@@ -815,27 +824,25 @@ function formatHours(minutes) {
         }
 		
         function getShiftClass(shift, date) {
-            if (!shift) {
-                return 'bg-white';
-            }
-            const dayOfWeek = date.getDay();
-            switch (shift.shiftType) {
-                case 'Standard':
-                    if (dayOfWeek === 0 || dayOfWeek === 6) {
-                        return 'shift-weekend-default';
-                    }
-                    const isModified = shift.earlyStartMinutes > 0 || shift.extraTimeWorkedMinutes > 0 || shift.lateStartMinutes > 0 || shift.earlyFinishMinutes > 0;
-                    return isModified ? 'shift-standard-modified' : 'shift-standard-default';
-                case 'Overtime':
-                    return 'shift-overtime-default';
-                case 'Bank Holiday':
-                    return 'shift-bank-holiday';
-                case 'Bank Holiday Overtime':
-                    return 'shift-bh-ot-default';
-                default:
-                    return 'bg-white';
-            }
-        }
+			if (!shift) return 'bg-white';
+				const dayOfWeek = date.getDay();
+				switch (shift.shiftType) {
+					case 'Standard':
+						if (dayOfWeek === 0 || dayOfWeek === 6) return 'shift-weekend-default';
+						const isModified = shift.earlyStartMinutes > 0 || shift.extraTimeWorkedMinutes > 0 || shift.lateStartMinutes > 0 || shift.earlyFinishMinutes > 0;
+						return isModified ? 'shift-standard-modified' : 'shift-standard-default';
+					case 'Overtime':
+						return 'shift-overtime-default';
+					case 'Bank Holiday':
+						return 'shift-bank-holiday';
+					case 'Bank Holiday Overtime':
+						return 'shift-bh-ot-default';
+					case 'Study Leave/Other': // New case
+						return 'shift-study-leave';
+					default:
+						return 'bg-white';
+				}
+		}
         
         // --- SHIFT MODAL LOGIC (UPDATED WITH LOOK-BACK) ---
 
@@ -1140,34 +1147,38 @@ function formatHours(minutes) {
         );
     }
 
-    // Standard / BH Deviations
-    // Standard / BH Deviations
-            if (shiftType === 'Standard' || shiftType === 'Bank Holiday') {
-                // 1. Early Start (Priority 1)
-                if (enhancements.earlyStartMinutes > 0) {
-                    hasDeviations = true;
-                    selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
-                        [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
-                }
-                // 2. Late Start (Priority 2)
-                if (enhancements.lateStartMinutes > 0) {
-                    hasDeviations = true;
-                    selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
-                        [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
-                }
-                // 3. Late Finish (Priority 3)
-                if (enhancements.extraTimeWorkedMinutes > 0) {
-                    hasDeviations = true;
-                    selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
-                        [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
-                }
-                // 4. Early Finish (Priority 4)
-                if (enhancements.earlyFinishMinutes > 0) {
-                    hasDeviations = true;
-                    selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
-                        [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
-                }
-            }
+    // Locate this section inside calculateEnhancements()
+// Standard / BH / Study Leave Deviations
+if (shiftType === 'Standard' || shiftType === 'Bank Holiday' || shiftType === 'Study Leave/Other') {
+    
+    // 1. Early Start (Allowed for Study Leave)
+    if (enhancements.earlyStartMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
+            [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+    }
+
+    // 2. Late Start (Hide for Study Leave)
+    if (enhancements.lateStartMinutes > 0 && shiftType !== 'Study Leave/Other') {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
+            [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+    }
+
+    // 3. Late Finish (Allowed for Study Leave)
+    if (enhancements.extraTimeWorkedMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
+            [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+    }
+
+    // 4. Early Finish (Hide for Study Leave)
+    if (enhancements.earlyFinishMinutes > 0 && shiftType !== 'Study Leave/Other') {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
+            [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+    }
+}
 
     selectorContainer.classList.toggle('hidden', !hasDeviations);
 
@@ -1294,7 +1305,7 @@ window.generateReport = function() {
                 let sunMins = (dayOfWeek === 0) ? totalPaidMinutes : 0;
                 
                 // --- CATEGORY 1: STANDARD & BANK HOLIDAY (Standard) ---
-                if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday') {
+                if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday' || shift.shiftType === 'Study Leave/Other') {
                     
                     // 1. BASE UNSOCIAL HOURS
                     // Calculate deviations to ensure we don't double count extra time in the Base Unsocial buckets
@@ -1317,6 +1328,9 @@ window.generateReport = function() {
                         totals.uhBH += bhBaseMins; 
                         baseShift.uhBH += bhBaseMins; 
                     }
+					
+					
+					
 
                     // 2. DEVIATIONS (Extra time worked - Early Start / Late Finish)
                     if (isPartTime && shift.extraTimeWorkedMinutes > 0) {
@@ -1442,6 +1456,19 @@ window.generateReport = function() {
                 if (shift.earlyFinishAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.earlyFinishMinutes || 0; totals.toilUsed += shift.earlyFinishMinutes || 0; }
                 if (shift.lateStartAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.lateStartMinutes || 0; totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
                 if (shift.earlyFinishAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.earlyFinishMinutes || 0; totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+				
+				if (shift.shiftType !== 'Study Leave/Other') { // Wrap this in a condition
+						if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
+						if (shift.earlyFinishAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.earlyFinishMinutes || 0; totals.toilUsed += shift.earlyFinishMinutes || 0; }
+						if (shift.lateStartAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.lateStartMinutes || 0; totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
+						if (shift.earlyFinishAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.earlyFinishMinutes || 0; totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+					} else {
+						// Explicitly ensure they are 0 for Study Leave
+						baseShift.toilUsed = 0;
+						baseShift.annualLeaveUsed = 0;
+					}
+				
+				
             }
             detailedPrintShifts.push(baseShift);
         }
