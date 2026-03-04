@@ -1,0 +1,379 @@
+/**
+ * --- ADMIN MENU SETUP ---
+ */
+function onOpen() {
+  const ui = SpreadsheetApp.getUi();
+  ui.createMenu('📄 Timesheet Admin')
+    .addItem('🚀 Process "Checked" Timesheets', 'processCheckedItems')
+    .addSeparator()
+    .addItem('🔴 Highlight Missing Staff (Red)', 'admin_HighlightMissingStaffRed')
+    .addItem('🟢 Reset Staff List Colors', 'admin_ResetStaffListColors')
+    .addItem('📧 Send Reminders to Missing Staff', 'admin_SendReminders')
+    .addSeparator()
+    .addItem('🧹 Monthly Reset & Archive', 'archiveAndResetSpreadsheet')
+    .addSeparator()
+    .addItem('🔐 Authorise Email Permissions', 'checkEmailPermissions') 
+    .addToUi();
+
+  SpreadsheetApp.getActiveSpreadsheet().toast(
+    "Manager tools loaded. Use the menu at the top.", 
+    "Admin Ready", 
+    5
+  );
+}
+
+// ==========================================================================
+// PART 1: PDF PROCESSING & EMAILING
+// ==========================================================================
+
+function processCheckedItems() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const indexSheet = ss.getSheetByName("Index");
+  const templateSheet = ss.getSheetByName("printTemplate");
+  const ui = SpreadsheetApp.getUi();
+
+  const MAX_BATCH_SIZE = 10; 
+  
+  if (!indexSheet || !templateSheet) {
+    ui.alert("Required sheets (Index or printTemplate) not found!");
+    return;
+  }
+
+  const folder = getOrCreateFolder("Processed Timesheets");
+  const lastRowIndex = indexSheet.getLastRow();
+  if (lastRowIndex < 2) {
+    ui.alert("No data found in Index.");
+    return;
+  }
+
+  const coreDataRange = indexSheet.getRange(2, 1, lastRowIndex - 1, 6); 
+  const coreData = coreDataRange.getDisplayValues(); 
+  const executionDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
+  
+  let totalCheckedFound = 0;
+  for (let i = 0; i < coreData.length; i++) {
+    if (coreData[i][0] === "Checked") totalCheckedFound++;
+  }
+
+  if (totalCheckedFound === 0) {
+    ui.alert("No rows marked 'Checked' found.");
+    return;
+  }
+
+  ss.toast(`Found ${totalCheckedFound} items. Processing batch...`, "System Started", -1);
+  SpreadsheetApp.flush();
+
+  let processedCount = 0;
+  let emailCount = 0;
+  let skippedCount = 0;
+  let errors = [];
+
+  for (let i = 0; i < coreData.length; i++) {
+    if (processedCount >= MAX_BATCH_SIZE) break;
+
+    const [status, authoriser, name, assignment, email, period] = coreData[i];
+
+    if (status === "Checked") {
+      const rowNum = i + 2;
+
+      // VALIDATION: Skip if Authoriser is "Unchecked"
+      if (String(authoriser).trim().toLowerCase() === "unchecked") {
+        indexSheet.getRange(rowNum, 2).setBackground("#f8bbd0"); // Pink
+        skippedCount++;
+        continue; 
+      }
+
+      ss.toast(`Processing item ${processedCount + 1}... \nUser: ${name}`, "⏳ Working...", -1);
+      
+      try {
+        const totalCols = indexSheet.getLastColumn();
+        let postedDateFormatted = "";
+        if (totalCols >= 7) {
+          const dateRowValues = indexSheet.getRange(rowNum, 7, 1, totalCols - 6).getValues()[0];
+          let rawPostedDate = "";
+          for (let j = dateRowValues.length - 1; j >= 0; j--) {
+            if (dateRowValues[j] !== "" && dateRowValues[j] !== null) {
+              rawPostedDate = dateRowValues[j];
+              break;
+            }
+          }
+          postedDateFormatted = (rawPostedDate instanceof Date) 
+            ? Utilities.formatDate(rawPostedDate, Session.getScriptTimeZone(), "dd/MM/yyyy")
+            : String(rawPostedDate);
+        }
+
+        let safeName = String(name).trim().replace(/[:\\\/?*\[\]]/g, ""); 
+        let tabName = `${safeName} - ${assignment} - ${period}`;
+        const sourceSheet = ss.getSheetByName(tabName);
+
+        if (sourceSheet) {
+          const shiftData = extractShiftData(sourceSheet);
+          const workerSubmissionDate = getWorkerSubmissionDate(sourceSheet);
+
+          const tempSS = createPopulatedTemplate(ss, templateSheet, name, assignment, period, authoriser, executionDate, workerSubmissionDate, postedDateFormatted, shiftData);
+          const pdfBlob = convertToPDF(tempSS, tabName);
+          folder.createFile(pdfBlob); 
+          
+          const cleanEmail = email ? email.toString().trim() : "";
+          if (cleanEmail !== "" && cleanEmail.includes("@")) {
+            try {
+              GmailApp.sendEmail(cleanEmail, "Approved Timesheet - " + period, "Please find attached your approved timesheet for " + period + ".\n\nAuthorised by: " + authoriser, {
+                  attachments: [pdfBlob],
+                  name: "Timesheet System"
+              });
+              emailCount++;
+            } catch (emailErr) {
+              errors.push(`Email failed for ${name}: ${emailErr.toString()}`);
+            }
+          } else {
+             errors.push(`No valid email for ${name} (PDF saved)`);
+          }
+
+          DriveApp.getFileById(tempSS.getId()).setTrashed(true); 
+          indexSheet.getRange(rowNum, 2).setBackground(null);
+          indexSheet.getRange(rowNum, 1).setValue("Completed");
+          processedCount++;
+          
+        } else {
+          errors.push("Tab not found: " + tabName);
+        }
+      } catch (e) {
+        errors.push(`Row ${rowNum} (${name}): ${e.toString()}`);
+      }
+      SpreadsheetApp.flush(); 
+    }
+  }
+
+  // --- FINAL REPORTING ---
+  const remainingCount = totalCheckedFound - processedCount - skippedCount;
+  let message = `Batch Complete.\n${processedCount} timesheets generated.\n${emailCount} emails sent.`;
+
+  if (skippedCount > 0) {
+    message += `\n\n⚠️ ${skippedCount} items were SKIPPED (Authoriser was "Unchecked").`;
+  }
+  if (remainingCount > 0) {
+    message += `\n\n⚠️ BATCH LIMIT REACHED. ${remainingCount} items remaining. Please run again.`;
+  } else if (skippedCount === 0) {
+    message += `\n\n✅ All items processed!`;
+  }
+  if (errors.length > 0) {
+    message += "\n\n⚠️ Issues:\n" + errors.join("\n");
+  }
+  
+  ss.toast("Batch finished.", "Done", 3);
+  ui.alert("Batch Processing Result", message, ui.ButtonSet.OK);
+}
+
+function createPopulatedTemplate(ss, templateSheet, name, assignment, period, authoriser, execDate, workerDate, postedDate, shiftData) {
+  const tempSS = SpreadsheetApp.create("Temp_PDF_Export");
+  templateSheet.copyTo(tempSS).setName("Timesheet");
+  tempSS.deleteSheet(tempSS.getSheets()[0]);
+  const sheet = tempSS.getSheets()[0];
+
+  const replacements = {
+    "{{Name}}": name,
+    "{{Assignment}}": assignment,
+    "{{Period}}": period,
+    "{{Authoriser}}": authoriser,
+    "{{Date}}": execDate,
+    "{{WorkerDate}}": workerDate,
+    "{{PostedDate}}": postedDate
+  };
+
+  const fullRange = sheet.getDataRange();
+  const values = fullRange.getValues();
+
+  for (let r = 0; r < values.length; r++) {
+    for (let c = 0; c < values[r].length; c++) {
+      let cellValue = String(values[r][c]).trim();
+      if (cellValue in replacements) sheet.getRange(r + 1, c + 1).setValue(replacements[cellValue]);
+      
+      if (cellValue === "{{TableStart}}") {
+        shiftData.forEach(function(shift) {
+          sheet.getRange(r + 1 + shift.day, c + 1 + 2, 1, shift.data.length).setValues([shift.data]);
+        });
+        sheet.getRange(r + 1, c + 1).clearContent();
+      }
+    }
+  }
+  return tempSS;
+}
+
+function extractShiftData(sourceSheet) {
+  const allData = sourceSheet.getDataRange().getValues();
+  let results = [];
+  for (let i = 1; i < allData.length; i++) { 
+    if (String(allData[i][0]).includes("HISTORY OF CHANGES")) break;
+    let row = allData[i];
+    if (row[0] instanceof Date) {
+      let rawShiftRow = [row[1], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13]];
+      let cleanedShiftRow = rawShiftRow.map(val => (val === 0 || val === "0" || val === "0.00") ? "" : val);
+      results.push({ day: row[0].getDate(), data: cleanedShiftRow });
+    }
+  }
+  return results;
+}
+
+function getWorkerSubmissionDate(sourceSheet) {
+  const rowData = sourceSheet.getRange(2, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
+  let rawDate = "";
+  for (let j = rowData.length - 1; j >= 0; j--) {
+    if (rowData[j] !== "" && rowData[j] !== null) {
+      rawDate = rowData[j];
+      break;
+    }
+  }
+  return (rawDate instanceof Date) ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "dd/MM/yyyy") : String(rawDate);
+}
+
+function convertToPDF(ss, fileName) {
+  SpreadsheetApp.flush();
+  const params = ['format=pdf', 'size=A4', 'portrait=true', 'fitw=true', 'top_margin=0.40', 'bottom_margin=0.40', 'left_margin=0.40', 'right_margin=0.40', 'gridlines=false', 'printtitle=false', 'fzr=false', 'gid=' + ss.getSheets()[0].getSheetId()].join('&');
+  const url = `https://docs.google.com/spreadsheets/d/${ss.getId()}/export?${params}`;
+  const response = UrlFetchApp.fetch(url, { headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() } });
+  return response.getBlob().setName(fileName + ".pdf");
+}
+
+function getOrCreateFolder(name) {
+  const folders = DriveApp.getFoldersByName(name);
+  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
+}
+
+// ==========================================================================
+// PART 2: ARCHIVE & RESET LOGIC
+// ==========================================================================
+
+function archiveAndResetSpreadsheet() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  const response = ui.prompt('Monthly Reset & Archive', 'Enter a name for the archive copy (e.g., "Timesheets - January 2026"):', ui.ButtonSet.OK_CANCEL);
+  if (response.getSelectedButton() !== ui.Button.OK) return;
+  
+  const archiveName = response.getResponseText().trim();
+  if (!archiveName) {
+    ui.alert("Reset Cancelled: You must provide a name for the archive.");
+    return;
+  }
+
+  const confirm = ui.alert("Final Confirmation", "This will save a copy called '" + archiveName + "' and then PERMANENTLY delete all current data and user tabs from THIS spreadsheet. Continue?", ui.ButtonSet.YES_NO);
+  if (confirm !== ui.Button.YES) return;
+
+  try {
+    DriveApp.getFileById(ss.getId()).makeCopy(archiveName);
+    
+    const indexSheet = ss.getSheetByName("Index");
+    if (indexSheet && indexSheet.getLastRow() > 1) {
+      indexSheet.getRange(2, 1, indexSheet.getLastRow() - 1, indexSheet.getMaxColumns()).clearContent();
+    }
+
+    const keepSheets = ["Index", "staffList", "printTemplate", "Authorisers"];
+    ss.getSheets().forEach(sheet => {
+      if (!keepSheets.includes(sheet.getName())) ss.deleteSheet(sheet);
+    });
+
+    admin_ResetStaffListColors(true); 
+
+    ui.alert("Success!", "Archive saved and spreadsheet reset.", ui.ButtonSet.OK);
+
+  } catch (e) {
+    ui.alert("An error occurred: " + e.toString());
+  }
+}
+
+function checkEmailPermissions() {
+  const ui = SpreadsheetApp.getUi();
+  const remainingQuota = GmailApp.getRemainingDailyQuota();
+  ui.alert("✅ System Ready", "Quota: " + remainingQuota + " emails remaining.", ui.ButtonSet.OK);
+}
+
+// ==========================================================================
+// PART 3: STAFF LIST ADMIN TOOLS
+// ==========================================================================
+
+function admin_HighlightMissingStaffRed() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const staffSheet = ss.getSheetByName("staffList");
+  if (!staffSheet) return;
+  
+  const lastRow = staffSheet.getLastRow();
+  if (lastRow > 1) {
+    const bgRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
+    const backgrounds = bgRange.getBackgrounds();
+    for (let i = 0; i < backgrounds.length; i++) {
+      const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
+      if (bg === "#ffffff" || bg === "#fff" || bg === "") backgrounds[i][0] = "#ffcdd2";
+    }
+    bgRange.setBackgrounds(backgrounds);
+  }
+  ss.toast("Missing staff highlighted red.");
+}
+
+function admin_ResetStaffListColors(silent) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const staffSheet = ss.getSheetByName("staffList");
+  if (!staffSheet) return;
+  const lastRow = staffSheet.getLastRow();
+  if (lastRow > 1) staffSheet.getRange(2, 1, lastRow - 1, 1).setBackground(null);
+  if (!silent) ss.toast("Staff list colors reset.");
+}
+
+function admin_SendReminders() {
+  const ui = SpreadsheetApp.getUi();
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const staffSheet = ss.getSheetByName("staffList");
+
+  if (!staffSheet) return;
+  const lastRow = staffSheet.getLastRow();
+  if (lastRow < 2) return;
+
+  const dataRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
+  const data = dataRange.getValues();
+  const backgrounds = dataRange.getBackgrounds();
+  
+  let targetCount = 0;
+  for (let i = 0; i < data.length; i++) {
+    const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
+    if (bg !== "#c8e6c9" && bg !== "#ffe0b2" && data[i][0] !== "") targetCount++;
+  }
+
+  if (targetCount === 0) {
+    ui.alert("Everyone has submitted!");
+    return;
+  }
+
+  const htmlContent = `
+    <html>
+      <body style="font-family: Arial; padding: 15px;">
+        <div style="color:red; font-weight:bold;">Sending to ${targetCount} staff.</div>
+        <p>Subject: <input type="text" id="subject" style="width:100%" value="Reminder: Timesheet Submission Due"></p>
+        <p>Message: <textarea id="body" style="width:100%; height:100px;">Dear {{Name}},</textarea></p>
+        <button onclick="send()">Send Emails</button>
+        <script>
+          function send() {
+            google.script.run.withSuccessHandler(()=>google.script.host.close())
+            .admin_ProcessEmails(document.getElementById('subject').value, document.getElementById('body').value);
+          }
+        </script>
+      </body>
+    </html>
+  `;
+  ui.showModalDialog(HtmlService.createHtmlOutput(htmlContent).setWidth(400).setHeight(350), 'Reminders');
+}
+
+function admin_ProcessEmails(customSubject, customBody) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const staffSheet = ss.getSheetByName("staffList");
+  const data = staffSheet.getRange(2, 1, staffSheet.getLastRow()-1, 2).getValues();
+  const backgrounds = staffSheet.getRange(2, 1, staffSheet.getLastRow()-1, 1).getBackgrounds();
+
+  let sent = 0;
+  for (let i = 0; i < data.length; i++) {
+    const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
+    if (bg !== "#c8e6c9" && bg !== "#ffe0b2" && data[i][1].includes("@")) {
+      GmailApp.sendEmail(data[i][1], customSubject, customBody.replace(/{{Name}}/ig, data[i][0]));
+      sent++;
+    }
+  }
+  SpreadsheetApp.getUi().alert("Sent " + sent + " emails.");
+}

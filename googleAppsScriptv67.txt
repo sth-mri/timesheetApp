@@ -1,0 +1,485 @@
+/**
+ * GOOGLE APPS SCRIPT - SINGLE HEADER VERSION
+ * ------------------------------------------
+ * 1. USER TABS: Appends data with ONE Header Row (Timestamp).
+ * 2. INDEX TAB: Updates horizontally.
+ * 3. STAFF LIST: Tracks submitted timesheets (Green=Submitted, Orange=New, Red=Missing).
+ * v67 - Enforces Tab Ordering (Index = 1st, User Tabs = Added to end after staffList)
+ */
+
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: "Server busy, please try again."}));
+  }
+
+  try {
+    // 1. PARSE INPUT
+    if (!e || !e.postData) return ContentService.createTextOutput(JSON.stringify({result: "error", error: "No data received"}));
+    
+    const data = JSON.parse(e.postData.contents);
+    const userInfo = data.user;
+    const shifts = data.shifts || []; 
+    
+    // Determine Period
+    let submissionPeriod = data.period;
+    if (!submissionPeriod && shifts.length > 0) {
+      submissionPeriod = getMonthYear(shifts[0].date);
+    } else if (!submissionPeriod) {
+      submissionPeriod = getMonthYear(new Date()); 
+    }
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const timestamp = new Date();
+    const ukDate = timestamp.toLocaleDateString("en-GB"); 
+    const ukTime = timestamp.toLocaleTimeString("en-GB"); 
+    const fullTimestamp = `${ukDate} ${ukTime}`;
+    
+    // Tab Name
+    let safeName = userInfo.name.replace(/[:\\\/?*\[\]]/g, ""); 
+    let tabName = `${safeName} - ${userInfo.assignmentNumber} - ${submissionPeriod}`;
+    if (tabName.length > 100) tabName = tabName.substring(0, 100);
+
+    let sheet = ss.getSheetByName(tabName);
+
+    // Create User Tab if missing
+    if (!sheet) {
+      // ENFORCE TAB ORDER: Insert new user tab at Position 2 
+// (0 = Index, 1 = staffList, 2 = New User Tab).
+// This keeps printTemplate and Authorisers safely at the end.
+sheet = ss.insertSheet(tabName, 2);
+      
+      const headers = [
+        "Date", "Weekday", "Type", "Start", "End", 
+        "UH Sat", "UH Sun", "UH Night", "UH BH", 
+        "Extra Hrs", "OT M-F", "OT Sat", "OT Sun", "OT BH", 
+        "TOIL Acc", "TOIL Used", "AL Used", "Notes", "Timestamp"
+      ];
+      
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#e0e0e0");
+      sheet.setFrozenRows(1);
+      sheet.getRange("A:A").setNumberFormat("dd-mm-yyyy"); 
+      sheet.getRange("D:E").setNumberFormat("@"); 
+      
+      // Conditional Formatting for TOIL, AL, Notes & Timestamp cols (O, P, Q, R, S)
+      const rule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(ROW()>1, O1<>"")')
+        .setBackground("#fce4ec")
+        .setRanges([sheet.getRange("O1:S")])
+        .build();
+      
+      const rules = sheet.getConditionalFormatRules();
+      rules.push(rule);
+      sheet.setConditionalFormatRules(rules);
+    }
+
+    // 2. READ CURRENT SNAPSHOT
+    const allValues = sheet.getDataRange().getValues();
+    let dividerRowIndex = -1; 
+
+    for (let i = 0; i < allValues.length; i++) {
+      if (String(allValues[i][0]) === "--- HISTORY OF CHANGES ---") {
+        dividerRowIndex = i;
+        break;
+      }
+    }
+
+    const snapshotEndIndex = (dividerRowIndex === -1) ? allValues.length : dividerRowIndex;
+    const latestStateMap = new Map(); 
+    
+    if (snapshotEndIndex > 1) {
+      for (let i = 1; i < snapshotEndIndex; i++) {
+        const row = allValues[i];
+        if (isValidDataRow(row)) {
+          const dateStr = formatDate(new Date(row[0]));
+          latestStateMap.set(dateStr, row);
+        }
+      }
+    }
+
+    // 3. PROCESS SHIFTS
+    const cleanRows = [];
+    const changeRows = [];
+    const touchedDates = new Set(); 
+    let hasActualChanges = false;
+
+    // A. Process Incoming
+    shifts.forEach(shift => {
+      const rowDateStr = shift.date;
+      const noteInput = shift.notes || "";
+      touchedDates.add(rowDateStr);
+      const dateObject = new Date(shift.date);
+
+      const baseRowData = [
+        dateObject,
+        shift.weekday, shift.shiftType,
+        shift.startTime, shift.finishTime,
+        Number(shift.uhSat), Number(shift.uhSun), Number(shift.uhNight), Number(shift.uhBH),
+        Number(shift.extraHoursWorked), Number(shift.otMonFri), Number(shift.otSat), Number(shift.otSun), Number(shift.otBH),
+        Number(shift.toilAccrued), Number(shift.toilUsed), Number(shift.annualLeaveUsed),
+        noteInput, timestamp
+      ];
+
+      cleanRows.push([...baseRowData]); 
+
+      if (latestStateMap.has(rowDateStr)) {
+        const existingData = latestStateMap.get(rowDateStr);
+        const inputCompData = baseRowData.slice(0, 17);
+
+        let isDifferent = false;
+        for (let c = 1; c <= 16; c++) {
+          if (normalize(existingData[c]) !== normalize(inputCompData[c])) {
+            isDifferent = true;
+            break;
+          }
+        }
+
+        if (isDifferent) {
+          const oldRow = [...existingData]; 
+          const oldNotes = String(oldRow[17] || "");
+          oldRow[17] = (oldNotes ? oldNotes + " " : "") + `[AMENDED]`; 
+          oldRow[18] = timestamp; 
+          changeRows.push(oldRow);
+          hasActualChanges = true;
+        }
+      } else {
+        if (latestStateMap.size > 0) {
+            const newRow = [...baseRowData];
+            newRow[17] = (noteInput ? noteInput + " " : "") + `[NEW]`;
+            changeRows.push(newRow);
+            hasActualChanges = true;
+        } else {
+            hasActualChanges = true; 
+        }
+      }
+    });
+
+    // B. Check Deletions
+    latestStateMap.forEach((val, keyDate) => {
+      if (!touchedDates.has(keyDate)) {
+        const deletedRow = [...val]; 
+        const oldNotes = String(deletedRow[17] || "");
+        deletedRow[17] = (oldNotes ? oldNotes + " " : "") + `[DELETED]`; 
+        deletedRow[18] = timestamp; 
+        changeRows.push(deletedRow);
+        hasActualChanges = true;
+      }
+    });
+
+    // 4. UPDATE SHEET
+    if (hasActualChanges || latestStateMap.size === 0) {
+      const rowsToDelete = snapshotEndIndex - 1; 
+      if (rowsToDelete > 0) sheet.deleteRows(2, rowsToDelete);
+
+      if (cleanRows.length > 0) {
+        sheet.insertRowsAfter(1, cleanRows.length);
+        const range = sheet.getRange(2, 1, cleanRows.length, 19);
+        range.setValues(cleanRows);
+        range.setBackground(null).setFontWeight("normal");
+        sheet.getRange(2, 1, cleanRows.length, 1).setNumberFormat("dd-mm-yyyy");
+        sheet.getRange(2, 4, cleanRows.length, 2).setNumberFormat("@");
+      }
+
+      if (changeRows.length > 0) {
+        if (dividerRowIndex === -1) {
+           sheet.appendRow(["--- HISTORY OF CHANGES ---"]);
+           sheet.getRange(sheet.getLastRow(), 1, 1, 19).setBackground("#ffe0b2").setFontWeight("bold");
+        }
+        const batchHeader = new Array(19).fill("");
+        batchHeader[0] = `Changes @ ${fullTimestamp}`;
+        changeRows.unshift(batchHeader);
+        
+        const historyColors = changeRows.map(row => {
+           const note = String(row[17]);
+           if(note.includes("[DELETED]")) return new Array(19).fill("#ffcdd2"); 
+           if(note.includes("[AMENDED]")) return new Array(19).fill("#fff9c4"); 
+           if(note.includes("[NEW]")) return new Array(19).fill("#c8e6c9"); 
+           return new Array(19).fill("#e0e0e0"); 
+        });
+
+        const startRow = sheet.getLastRow() + 1;
+        sheet.getRange(startRow, 1, changeRows.length, 19).setValues(changeRows);
+        sheet.getRange(startRow, 1, changeRows.length, 19).setBackgrounds(historyColors);
+        sheet.getRange(startRow, 1, 1, 19).setFontWeight("bold"); 
+      }
+
+      // Update Index with Email
+      updateIndexTab(ss, userInfo, submissionPeriod, fullTimestamp);
+      
+      // Update the staffList tab
+      updateStaffList(ss, userInfo, submissionPeriod);
+
+      return ContentService.createTextOutput(JSON.stringify({result: "success", message: `Processed successfully.`})).setMimeType(ContentService.MimeType.JSON);
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({result: "success", message: "No changes detected."})).setMimeType(ContentService.MimeType.JSON);
+    }
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: error.toString()})).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * INDEX FUNCTION
+ */
+function updateIndexTab(ss, userInfo, period, timestampStr) {
+  let indexSheet = ss.getSheetByName("Index");
+  // ENFORCE TAB ORDER: Ensure Index is created at position 0 (first tab)
+  if (!indexSheet) indexSheet = ss.insertSheet("Index", 0);
+
+  // INSERT HEADERS
+  if (indexSheet.getLastRow() === 0) {
+    const headers = ["Status", "Authoriser", "Name", "Assignment no", "Email", "Month/Year", "Date 1st Posted"];
+    indexSheet.appendRow(headers);
+    indexSheet.setFrozenRows(1);
+    indexSheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#e0e0e0");
+    
+    // Apply Conditional Rule
+    const range = indexSheet.getRange("A2:A");
+    const rule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("AMENDED AFTER CHECK")
+      .setBackground("#d81b60") 
+      .setFontColor("#ffffff")  
+      .setRanges([range])
+      .build();
+    const rules = indexSheet.getConditionalFormatRules();
+    rules.push(rule);
+    indexSheet.setConditionalFormatRules(rules);
+  }
+
+  // SEARCH FOR EXISTING ENTRY
+  const lastRow = indexSheet.getLastRow();
+  let targetRowIndex = -1;
+
+  if (lastRow > 1) {
+    const searchName = String(userInfo.name).trim().toLowerCase();
+    const searchAssign = String(userInfo.assignmentNumber).trim().toLowerCase();
+    const searchPeriod = String(period).trim().toLowerCase();
+
+    const indexData = indexSheet.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
+    
+    for (let i = 0; i < indexData.length; i++) {
+      const rowName = String(indexData[i][2]).trim().toLowerCase();
+      const rowAssign = String(indexData[i][3]).trim().toLowerCase();
+      const rowPeriod = String(indexData[i][5]).trim().toLowerCase(); 
+
+      if (rowName === searchName && rowAssign === searchAssign && rowPeriod === searchPeriod) {
+        targetRowIndex = i + 2; 
+        break;
+      }
+    }
+  }
+
+  if (targetRowIndex > 0) {
+    if (userInfo.email) indexSheet.getRange(targetRowIndex, 5).setValue(userInfo.email);
+
+    const statusCell = indexSheet.getRange(targetRowIndex, 1);
+    const statusText = statusCell.getDisplayValue().replace(/\s+/g, ' ').trim().toLowerCase();
+    
+    if (statusText === "checked" || statusText === "completed") {
+      statusCell.setValue("AMENDED AFTER CHECK");
+      
+      const authCell = indexSheet.getRange(targetRowIndex, 2);
+      authCell.clearDataValidation(); 
+      authCell.setValue("Unchecked");
+      
+      const authoriserSheet = ss.getSheetByName("Authorisers");
+      if (authoriserSheet) {
+        const authRange = authoriserSheet.getRange("A2:A"); 
+        const authRule = SpreadsheetApp.newDataValidation().requireValueInRange(authRange).setAllowInvalid(false).build();
+        authCell.setDataValidation(authRule);
+      }
+    }
+
+    const maxSheetCols = indexSheet.getMaxColumns();
+    const rowValues = indexSheet.getRange(targetRowIndex, 1, 1, maxSheetCols).getValues()[0];
+    
+    let lastOccupiedColumnIndex = -1;
+    for (let i = rowValues.length - 1; i >= 0; i--) {
+      if (rowValues[i] !== "" && rowValues[i] != null) {
+        lastOccupiedColumnIndex = i;
+        break;
+      }
+    }
+    
+    if (lastOccupiedColumnIndex < 6) lastOccupiedColumnIndex = 6;
+    
+    let writeCol = lastOccupiedColumnIndex + 2;
+    if (writeCol > maxSheetCols) {
+      indexSheet.insertColumnAfter(maxSheetCols);
+    }
+    indexSheet.getRange(targetRowIndex, writeCol).setValue(timestampStr);
+
+  } else {
+    indexSheet.appendRow(["Received", "", userInfo.name, userInfo.assignmentNumber, userInfo.email, period, timestampStr]);
+    
+    const newRow = indexSheet.getLastRow();
+    const statusCell = indexSheet.getRange(newRow, 1);
+    const statusOptions = ["Received", "Checked", "Failed check", "Completed", "AMENDED AFTER CHECK"];
+    const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statusOptions, true).setAllowInvalid(false).build();
+    statusCell.setDataValidation(statusRule);
+    statusCell.setValue("Received"); 
+    statusCell.setBackground(null).setFontColor(null);
+
+    const authoriserCell = indexSheet.getRange(newRow, 2);
+    const authoriserSheet = ss.getSheetByName("Authorisers");
+    if (authoriserSheet) {
+      const authRange = authoriserSheet.getRange("A2:A"); 
+      const authRule = SpreadsheetApp.newDataValidation().requireValueInRange(authRange).setAllowInvalid(false).build();
+      authoriserCell.setDataValidation(authRule);
+      authoriserCell.setValue("Unchecked"); 
+    }
+  }
+  SpreadsheetApp.flush(); 
+}
+
+/**
+ * STAFF LIST FUNCTION
+ * Updates the staffList tab: Green if found, Orange if appended.
+ * If submitted past the 1st of the next month, colors remaining staff Light Red.
+ */
+function updateStaffList(ss, userInfo, submissionPeriod) {
+  const staffSheet = ss.getSheetByName("staffList");
+  if (!staffSheet) return; // Ignore if the tab doesn't exist
+
+  const searchName = String(userInfo.name || "").trim().toLowerCase();
+  if (!searchName) return; 
+
+  let lastRow = staffSheet.getLastRow();
+  let targetRowIndex = -1;
+
+  // 1. Search for the user in Column A
+  if (lastRow > 1) {
+    const names = staffSheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+    for (let i = 0; i < names.length; i++) {
+      if (String(names[i][0]).trim().toLowerCase() === searchName) {
+        targetRowIndex = i + 2;
+        break;
+      }
+    }
+  }
+
+  // 2. Mark Submitter Green or Append and Color Orange
+  if (targetRowIndex > 0) {
+    // Found -> Light Green
+    staffSheet.getRange(targetRowIndex, 1).setBackground("#c8e6c9");
+  } else {
+    // Not Found -> Append and color Light Orange
+    staffSheet.appendRow([userInfo.name]);
+    lastRow = staffSheet.getLastRow(); // Update last row count after append
+    staffSheet.getRange(lastRow, 1).setBackground("#ffe0b2");
+  }
+
+  // 3. Highlight missing staff Red dynamically if someone submits a late timesheet
+  // (i.e. if the current date is on or after the 1st of the month following the submission period)
+  if (submissionPeriod) {
+    const periodDate = new Date("1 " + submissionPeriod); // e.g. "1 February 2026"
+    if (!isNaN(periodDate.getTime())) {
+      const nextMonthFirst = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, 1);
+      const now = new Date();
+      
+      if (now >= nextMonthFirst) {
+        lastRow = staffSheet.getLastRow(); // Refresh in case we appended
+        if (lastRow > 1) {
+          const bgRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
+          const backgrounds = bgRange.getBackgrounds();
+          let changed = false;
+          
+          for (let i = 0; i < backgrounds.length; i++) {
+            const bgRaw = backgrounds[i][0];
+            const bg = bgRaw ? String(bgRaw).toLowerCase() : "";
+            // If cell has no background (white or empty), turn it light red.
+            // (This leaves existing Green #c8e6c9 and Orange #ffe0b2 alone)
+            if (bg === "#ffffff" || bg === "#fff" || bg === "") {
+              backgrounds[i][0] = "#ffcdd2"; // Light Red
+              changed = true;
+            }
+          }
+          if (changed) {
+            bgRange.setBackgrounds(backgrounds);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * UTILITY: Send PDF to User
+ */
+function sendPdfToUser(userEmail, tabName, emailSubject, emailBody) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(tabName);
+  
+  if (!sheet) {
+    Logger.log("Sheet not found: " + tabName);
+    return;
+  }
+  
+  if (!userEmail || userEmail === "") {
+    Logger.log("No email address provided for " + tabName);
+    return;
+  }
+
+  const sheetId = sheet.getSheetId();
+  const spreadsheetId = ss.getId();
+
+  const url = "https://docs.google.com/spreadsheets/d/" + spreadsheetId + "/export" +
+              "?format=pdf&size=A4&fzr=true&portrait=true&fitw=true&gridlines=true&printtitle=false&sheetnames=false&pagenum=CENTER&gid=" + sheetId;
+
+  const params = { method: "GET", headers: { "authorization": "Bearer " + ScriptApp.getOAuthToken() } };
+  const response = UrlFetchApp.fetch(url, params);
+  const pdfBlob = response.getBlob().setName(tabName + ".pdf");
+
+  MailApp.sendEmail({
+    to: userEmail,
+    subject: emailSubject,
+    body: emailBody,
+    attachments: [pdfBlob]
+  });
+  
+  Logger.log("Email sent to " + userEmail);
+}
+
+// --- HELPERS ---
+
+function isValidDataRow(row) {
+  if (row[0] instanceof Date) return true;
+  if (typeof row[0] === 'string' && row[0].match(/^\d{4}-\d{2}-\d{2}$/)) return true;
+  return false;
+}
+
+function formatDate(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return ""; 
+  let month = '' + (d.getMonth() + 1);
+  let day = '' + d.getDate();
+  const year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  return [year, month, day].join('-'); 
+}
+
+function getMonthYear(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return ""; 
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function normalize(val) {
+  if (val instanceof Date) {
+    let h = val.getHours().toString().padStart(2, '0');
+    let m = val.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  if (val === null || val === undefined || val === "") return "0.00";
+  if (typeof val === 'number') return val.toFixed(2);
+  return String(val).trim();
+}
