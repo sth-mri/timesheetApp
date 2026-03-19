@@ -781,9 +781,9 @@
             div.id = `row-${id}`;
             div.innerHTML = `
                 <div class="grid grid-cols-3 gap-2 mb-2">
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Start</label><input type="time" class="call-start w-full border rounded p-1 text-sm" value="20:30" onchange="calculateCallOutDurations('${id}')"></div>
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Finish</label><input type="time" class="call-finish w-full border rounded p-1 text-sm" value="00:30" onchange="calculateCallOutDurations('${id}')"></div
-                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase">Patient Ref</label><input type="text" class="call-ref w-full border rounded p-1 text-sm uppercase" maxlength="10" placeholder="A1234567"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap truncate">Start</label><input type="time" class="call-start w-full border rounded p-1 text-sm" value="20:30" onchange="calculateCallOutDurations('${id}')"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap truncate">Finish</label><input type="time" class="call-finish w-full border rounded p-1 text-sm" value="00:30" onchange="calculateCallOutDurations('${id}')"></div>
+                    <div><label class="block text-[10px] font-bold text-gray-500 uppercase whitespace-nowrap truncate">Patient Ref</label><input type="text" class="call-ref w-full border rounded p-1 text-sm uppercase" maxlength="10" placeholder="A1234567"></div>
                 </div>
                 <div class="flex justify-between items-center bg-gray-50 p-2 rounded text-xs text-gray-600">
                     <span id="dur-${id}">Duration: --</span>
