@@ -1,0 +1,1839 @@
+<!-- START OF FILE timesheetGASv20_64_live.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal Shift & Overtime Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc; /* Light gray background */
+        }
+        /* Custom calendar styling */
+        .calendar-day {
+            min-height: 100px;
+            cursor: pointer;
+            transition: all 0.2s;
+            @apply border border-gray-200 p-2 rounded-lg relative text-sm;
+        }
+        .calendar-day:hover:not(.day-disabled) {
+            @apply shadow-md scale-[1.01] bg-gray-50;
+        }
+        .day-disabled {
+            background-color: #e2e8f0;
+            color: #94a3b0;
+        }
+
+        /* --- COLOR-CODING BASED ON SHIFT TYPE AND MODIFICATION --- */
+        
+        /* Standard Weekday (Mon-Fri) */
+        .shift-standard-default { background-color: #d1fae5; } /* Light Green (Green 100) */
+        .shift-standard-modified { background-color: #6ee7b7; } /* Darker Green (Green 300) */
+        
+        /* Standard Weekend (Sat/Sun) */
+        .shift-weekend-default { background-color: #ffe4c4; } /* Light Orange (Orange 100) */
+        .shift-weekend-modified { background-color: #fdba74; } /* Darker Orange (Orange 300) */
+        
+        /* General Overtime (Non-BH) */
+        .shift-overtime-default { background-color: #fbcfe8; } /* Light Pink (Pink 100) */
+        .shift-overtime-modified { background-color: #f472b6; } /* Darker Pink (Pink 400) */
+        
+        /* Bank Holiday Overtime */
+        .shift-bh-ot-default { background-color: #f3e8ff; } /* Light Purple (Purple 100) */
+        .shift-bh-ot-modified { background-color: #c084fc; } /* Darker Purple (Purple 400) */
+        
+        /* Bank Holiday (Standard Hours) */
+        .shift-bank-holiday { background-color: #e2e8f0; } /* Light Grey (Gray 200) */
+		
+		/* Study Leave / Other */
+		.shift-study-leave { background-color: #cffafe; } /* Light Cyan (Cyan 100) */
+		
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="app" class="max-w-4xl mx-auto">
+        <header class="mb-2">
+            <h1 class="text-4xl font-extrabold text-gray-900 mb-2">Personal Shift Tracker</h1>
+        </header>
+		
+		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
+            <p class="font-medium">Version: <span class="font-normal">timesheetGASv22_68_live</span></p>
+            <p id="device-info"></p> 
+        </div>
+		
+        <div id="displayed-profile-section" class="bg-indigo-50 p-4 rounded-xl shadow-inner mb-4 flex justify-between items-center hidden">
+            <div class="text-indigo-900 space-y-1">
+                <p class="text-sm font-medium">Name: <span id="display-userName" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Payroll No: <span id="display-payrollNumber" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Email: <span id="display-userEmail" class="font-bold"></span></p>
+                <p class="text-sm font-medium">Contracted Hours: <span id="display-contractedHours" class="font-bold"></span></p>
+            </div>
+            <button onclick="editProfile()" class="text-indigo-600 hover:text-indigo-800 text-sm font-semibold py-1 px-3 rounded-lg bg-white/50 hover:bg-white transition">
+                Change
+            </button>
+        </div>
+
+        <div id="profile-input-section" class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">Your Details (Saved Locally)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label for="userName" class="block text-sm font-medium text-gray-700">Name</label>
+                    <input type="text" id="userName" placeholder="Your Name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="payrollNumber" class="block text-sm font-medium text-gray-700">Payroll Number</label>
+                    <input type="text" id="payrollNumber" placeholder="Your Payroll No." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="userEmail" class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <input type="email" id="userEmail" placeholder="username@emailaddr" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div>
+                    <label for="contractedHoursSelect" class="block text-sm font-medium text-gray-700">Contracted Hours (Per Week)</label>
+                    <select id="contractedHoursSelect" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border" onchange="checkCustomContractedHours()">
+                        <option value="37.5">37.5 Hours (Default)</option>
+                        <option value="25">25.0 Hours</option>
+                        <option value="12.5">12.5 Hours</option>
+                        <option value="custom">Custom Hours</option>
+                    </select>
+                </div>
+                <div id="customHoursInputContainer" class="hidden">
+                    <label for="customContractedHours" class="block text-sm font-medium text-gray-700">Custom Hours</label>
+                    <input type="number" step="0.5" id="customContractedHours" placeholder="e.g. 30" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border">
+                </div>
+                <div class="flex items-end md:col-span-1">
+                    <button onclick="saveProfile()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition duration-150 ease-in-out">
+                        Save Profile
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+
+        <!-- NEW LOCATION: Generate Report Button & Info Button -->
+        <div class="mt-6 flex flex-wrap justify-between items-center gap-4 pt-4 border-t border-gray-200">
+            <!-- Generate Report Button (Smaller, Left Justified) -->
+            <button id="report-button" onclick="generateReport()" class="w-1/3 md:w-1/4 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-xl shadow-md hover:shadow-lg transition duration-200 ease-in-out flex items-center justify-center gap-2 text-base">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                </svg>
+                <span id="report-button-text">Generate Report</span>
+            </button>
+
+            <!-- Info Button -->
+            <button onclick="openInfoModal()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold py-2 px-4 rounded-xl shadow-md transition duration-200 ease-in-out flex items-center gap-2 text-sm" title="How to use">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                </svg>
+                Info
+            </button>
+        </div>
+
+        <div class="bg-white p-6 rounded-xl shadow-lg">
+            <div class="flex justify-between items-center mb-6">
+                <button onclick="changeMonth(-1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12 15.75 4.5" /></svg></button>
+                <h2 id="current-month-year" class="text-3xl font-bold text-gray-900"></h2>
+                <button onclick="changeMonth(1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5 15.75 12 8.25 19.5" /></svg></button>
+            </div>
+            
+            <div class="grid grid-cols-7 gap-1 text-center font-medium text-gray-600 mb-2">
+                <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+            </div>
+
+            <div id="calendar-grid" class="grid grid-cols-7 gap-1">
+            </div>
+            
+            <!-- NEW Data Management Section -->
+            <div class="mt-6 pt-4 border-t border-gray-200">
+                <h3 class="text-lg font-bold text-gray-700 mb-3">Data Management</h3>
+                
+                <!-- Backup & Restore Row -->
+                <div class="flex flex-wrap gap-4 mb-4">
+                    <button onclick="backupData()" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
+                        </svg>
+                        Backup to File
+                    </button>
+                    
+                    <button onclick="document.getElementById('restore-input').click()" class="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition flex items-center justify-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" class="origin-center rotate-180" />
+                        </svg>
+                        Restore from File
+                    </button>
+                    <!-- Hidden File Input for Restore -->
+                    <input type="file" id="restore-input" accept=".json" class="hidden" onchange="restoreData(this)">
+                </div>
+
+                <!-- Danger Zone Row -->
+                <div class="flex flex-wrap justify-between items-center gap-4">
+                    <button onclick="clearAllShifts()" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition text-sm">
+                        <span>Clear <span id="clear-month-text">Current Month's</span> Shifts</span>
+                    </button>
+
+                    <button onclick="hardReset()" class="bg-red-800 hover:bg-red-900 text-white font-bold py-2 px-4 rounded-lg shadow-lg transition text-sm">
+                        <span>⚠ Delete All Local Data</span>
+                    </button>
+                </div>
+            </div>
+
+        </div>
+        <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50">
+            <div class="bg-white p-6 rounded-lg shadow-2xl text-center">
+                <p id="message-text" class="text-lg font-medium text-gray-700">Loading...</p>
+                <button onclick="hideMessageBox()" class="mt-4 bg-indigo-500 text-white py-2 px-4 rounded-lg hidden" id="message-close-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+
+    <div id="shift-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-40 p-4">
+        <div class="bg-white w-full max-w-lg max-h-[90vh] rounded-xl shadow-2xl p-6 transform transition-all duration-300 overflow-y-auto">
+            <h3 class="text-2xl font-bold text-gray-800 mb-2" id="modal-date-display">Shift Details for [Date]</h3>
+            <p class="text-sm text-gray-500 mb-6">Standard Shift: 07:20 - 20:30 (12.5 hours total, 40 min breaks)</p>
+            <form id="shift-form">
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700">Shift Type</label>
+                    <div class="mt-1 space-y-2">
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Standard" class="form-radio text-indigo-600 h-4 w-4" checked onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Standard (Weekday/Weekend)</span>
+                        </label>
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Overtime" class="form-radio text-red-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Overtime (Non-BH)</span>
+                        </label>
+                        <hr class="my-1 border-gray-100">
+                        <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Bank Holiday" class="form-radio text-blue-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Bank Holiday (Standard Hours)</span>
+                        </label>
+                       <label class="inline-flex items-center mr-4">
+                            <input type="radio" name="shiftType" value="Bank Holiday Overtime" class="form-radio text-purple-600 h-4 w-4" onchange="calculateEnhancements()">
+                            <span class="ml-2 text-gray-700">Bank Holiday Overtime</span>
+                        </label>
+						<!-- Inside the shift-modal form, shiftType radio group -->			
+						<label class="inline-flex items-center">
+							<input type="radio" name="shiftType" value="Study Leave/Other" class="form-radio text-cyan-600 h-4 w-4" onchange="calculateEnhancements()">
+							<span class="ml-2 text-gray-700">Study Leave/Other</span>
+						</label>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="mb-4">
+                        <label for="startTime" class="block text-sm font-medium text-gray-700">Start Time (HH:MM)</label>
+                        <input type="time" id="startTime" value="07:20" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                    </div>
+
+                    <div class="mb-4">
+                        <label for="finishTime" class="block text-sm font-medium text-gray-700">Finish Time (HH:MM)</label>
+                        <input type="time" id="finishTime" value="20:30" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                    </div>
+                </div>
+
+                <div id="breaks-section" class="mb-6 border p-4 rounded-lg bg-gray-50">
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Breaks (20 min each)</p>
+                    <p class="text-xs text-gray-500 mb-2">Adjustable if shift starts after 13:00 or finishes before 19:00.</p>
+                    <label for="breaksCount" class="block text-sm font-medium text-gray-700">Number of Unpaid 20 min Breaks</label>
+                    <select id="breaksCount" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">
+                        <option value="2">2 (40 minutes total - Default)</option>
+                        <option value="1">1 (20 minutes total)</option>
+                        <option value="0">0 (0 minutes total)</option>
+                    </select>
+                </div>
+
+                <div id="deviation-selectors" class="mb-6 space-y-3 p-4 border rounded-lg bg-yellow-50/70">
+                    <p class="font-bold text-lg mb-2 text-yellow-800">Time Deviation Management</p>
+                </div>
+                
+                <!-- NEW: Notes Section -->
+                <div class="mb-4">
+                    <label for="shiftNotes" class="block text-sm font-medium text-gray-700">Shift Notes</label>
+                    <textarea id="shiftNotes" rows="2" placeholder="Reason for OT, ward worked, etc." class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2 border"></textarea>
+                </div>
+
+                <div class="mb-6 p-4 border rounded-lg bg-indigo-50">
+                    <p class="font-bold text-lg mb-2 text-indigo-700">Calculated Shift Summary</p>
+                    <div id="enhancement-display" class="space-y-1 text-sm text-indigo-800">
+                        </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-4 border-t">
+                    <div class="flex space-x-2">
+                        <button type="button" onclick="closeShiftModal()" class="py-2 px-4 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition">Cancel</button>
+                        <button type="button" onclick="deleteShift()" id="delete-shift-btn" class="py-2 px-4 bg-red-600 text-white rounded-lg font-semibold hover:bg-red-700 transition hidden">Delete Shift</button>
+                    </div>
+                    <button type="submit" class="py-2 px-6 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition">Save Shift</button>
+                </div>
+            </form>
+        </div>
+    </div>
+    
+
+<div id="report-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-40 p-4">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] rounded-xl shadow-2xl p-6 transform transition-all duration-300 overflow-y-auto">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2" id="report-title">Monthly Shift Report</h3>
+        <p class="text-sm text-gray-500 mb-6" id="report-period"></p>
+
+<div class="p-4 border-t border-gray-200 mt-6 flex justify-between items-center">
+    
+        
+   
+        <!-- NEW SEND BUTTON -->
+        <button onclick="prepareAndShowSendDialog()" class="bg-green-600 hover:bg-green-700 text-white font-bold py-1.5 px-3 rounded transition shadow-md flex items-center">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-1">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+            Send Shift Data
+        </button>
+       
+
+		<div class="flex space-x-3">
+        <button onclick="closeReportModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-1.5 px-3 rounded transition">
+            Close
+        </button>
+
+
+		</div>
+</div>
+		
+        <div id="report-content" class="space-y-4">
+            <div class="bg-gray-100 p-4 rounded-lg">
+                <p class="font-semibold text-lg mb-2">Summary Totals (Hours)</p>
+                <table class="min-w-full divide-y divide-gray-200">
+                    <tbody id="report-table-body" class="divide-y divide-gray-200 text-gray-700">
+                        </tbody>
+                </table>
+            </div>
+            
+            <div class="mt-8 pt-4 border-t border-gray-200">
+                <p class="font-semibold text-lg mb-4 text-gray-800">Detailed Shift Log</p>
+                <div id="detailed-shift-list" class="space-y-3">
+                    </div>
+            </div>
+        </div>
+    </div>
+</div>
+	
+<!-- INFO MODAL (NEW) -->
+<div id="info-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl p-6 transform transition-all duration-300">
+        <h3 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Info</h3>
+        
+        <div class="text-gray-700 space-y-4 mb-6 text-sm leading-relaxed">
+            <p class="font-semibold">How to use this app:</p>
+            <ul class="list-disc list-inside space-y-2 pl-2">
+                <li><span class="font-medium">Setup:</span> Enter your name, payroll number, email, and contracted hours in the "Your Details" section and click "Save Profile". This data is stored locally on your device.</li>
+                <li><span class="font-medium">Add Shifts:</span> Click on any calendar day to add a shift. The app defaults to a standard 07:20 - 20:30 shift but allows you to adjust times, select Overtime/Bank Holiday types, and manage breaks or early/late deviations.</li>
+                <li><span class="font-medium">Sending Data:</span> At the end of the month, click "Generate Report". This will show you a simple summary of your shifts. Just click "Send Now" to send in your timesheet data. Thats it, your done for this month!</li>
+				<li><span class="font-medium">Re-sending Data:</span> NOTE - If you submit timesheet data from one computer and then need to change but use a different computer or mobile then you will need to re-enter all your shifts again. If you use the same device (computer or mobile) then it will remember the shifts you had entered and you can make whatever change you need, then resubmit your data.</li>
+				<li><span class="font-medium">Backup/Restore:</span> Use the buttons in the "Data Management" section to save your shifts to a file. You can upload this file to Google Drive and open it on another device to transfer your data.</li>
+                <li><span class="font-medium">Timesheet:</span> When the timesheet has been approved a copy will be emailed back to the email address that you entered in "Your Details".</li>
+			</ul>
+        </div>
+
+        <div class="flex justify-end pt-2">
+            <button onclick="closeInfoModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- NEW SEND DATA MODAL -->
+<div id="send-data-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white w-full max-w-4xl max-h-[90vh] rounded-xl shadow-2xl p-6 flex flex-col">
+        <h3 class="text-2xl font-bold text-gray-800 mb-2">Data to send to sthMriShiftData:</h3>
+
+<!-- Actions -->
+        <div class="flex justify-start space-x-3 pt-4 border-t">
+            <button onclick="sendDataToGoogle()" id="btn-send-gas" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg transition shadow-md">
+                Send Now
+            </button>
+			<button onclick="document.getElementById('send-data-modal').classList.add('hidden')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg transition">
+                Cancel
+            </button>
+        </div>
+
+        <!-- Preview Table -->
+        <div class="overflow-auto flex-grow border border-gray-200 rounded-lg mb-4 bg-gray-50 p-2">
+            <table class="min-w-full text-xs text-left text-gray-600">
+                <thead class="bg-gray-200 font-bold text-gray-800">
+                    <tr>
+                        <th class="p-2">Date</th>
+                        <th class="p-2">Type</th>
+                        <th class="p-2">Start-End</th>
+                        <th class="p-2">UH (Sat/Sun/Nt/BH)</th>
+                        <th class="p-2">Extra Hrs</th>
+                        <th class="p-2">OT (M-F/Sat/Sun/BH)</th>
+                        <th class="p-2">TOIL (Acc/Used)</th>
+                        <th class="p-2">AL Used</th>
+                        <th class="p-2">Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="send-data-preview-body" class="divide-y divide-gray-200">
+                    <!-- Rows generated by JS -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Webhook URL Display (Read-Only) -->
+        <div class="mb-4">
+            <label class="block text-sm font-medium text-gray-700">Google Apps Script Web App URL</label>
+            <p id="xyz" class="mt-1 text-xs text-gray-400 font-mono break-all bg-gray-50 p-2 rounded border border-gray-200">
+				https://script.google.com/macros/s/AKfycbzXdIHVm-V0YOer9Il-FvPC8VxUjG4k39hd_MtfT62GeXESoWJsl0u2SlLiHKDIRQ32/exec
+            </p>
+        </div>
+
+        
+    </div>
+</div>
+
+<!-- NEW BACKUP MODAL -->
+<div id="backup-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
+    <div class="bg-white w-full max-w-md rounded-xl shadow-2xl p-6 transform transition-all duration-300">
+        <div class="flex items-center space-x-3 mb-4">
+            <div class="bg-blue-100 p-2 rounded-full">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-blue-600">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z" />
+                </svg>
+            </div>
+            <h3 class="text-xl font-bold text-gray-800">Backup Recommendation</h3>
+        </div>
+        
+        <div class="text-gray-600 space-y-3 mb-6 text-sm">
+            <p>You are about to download your shift data to a file.</p>
+            <div class="bg-blue-50 border-l-4 border-blue-500 p-3 rounded">
+                <p class="font-semibold text-blue-800">Tip:</p>
+                <p class="text-blue-700">Please upload this file to your <span class="font-bold">Google Drive</span> immediately after saving.</p>
+            </div>
+            <p>This ensures you can restore your shifts if you lose this device or switch to a new one.</p>
+        </div>
+
+        <div class="flex justify-end space-x-3">
+            <button onclick="document.getElementById('backup-modal').classList.add('hidden')" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold rounded-lg transition">
+                Cancel
+            </button>
+            <button onclick="executeBackupSave()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-md transition flex items-center">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 mr-2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                Save File
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+        // --- GLOBAL STATE ---
+        let currentYear, currentMonth;
+        let userProfile = { name: '', payrollNumber: '', userEmail: '', contractedHours: 37.5 };
+        let userShifts = {}; // Key: "YYYY-MM-DD", Value: { shiftData }
+        let selectedDate = null;
+        let currentReportData = { totals: {}, shiftsInMonth: [], monthName: '' }; // Cache for print function
+
+        // Standard shift times
+        const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
+        const DEFAULT_END_TIME_MINUTES = timeToMinutes('20:30');
+
+        // --- LOCAL STORAGE KEY CONSTANTS ---
+        const PROFILE_KEY = 'userProfile';
+        const SHIFTS_KEY = 'userShifts';
+
+        // --- UTILITY FUNCTIONS ---
+        
+        // Function to Open Info Modal
+        window.openInfoModal = function() {
+            document.getElementById('info-modal').classList.remove('hidden');
+        }
+
+        // Function to Close Info Modal
+        window.closeInfoModal = function() {
+            document.getElementById('info-modal').classList.add('hidden');
+        }
+        
+window.hardReset = function() {
+    if (confirm("WARNING: This will delete ALL shift history and your profile details from this device.\n\nThis action cannot be undone.\n\nAre you sure?")) {
+        // Remove specific keys
+        localStorage.removeItem('userShifts');
+        localStorage.removeItem('userProfile');
+        
+        // Or use localStorage.clear() to wipe everything for this domain
+        
+        alert("All data deleted. The page will now reload.");
+        location.reload();
+    }
+}
+
+
+function detectDeviceAndBrowser() {
+    const userAgent = navigator.userAgent;
+    let device = 'Unknown Device';
+    let browser = 'Unknown Browser';
+
+    if (/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream) {
+        device = 'iOS (iPhone/iPad)';
+    } else if (/Android/.test(userAgent)) {
+        device = 'Android Mobile';
+    } else if (/Macintosh|Mac OS X/.test(userAgent)) {
+        device = 'Mac/OSX PC';
+    } else if (/Windows/.test(userAgent)) {
+        device = 'Windows PC';
+    } else if (/Linux/.test(userAgent)) {
+        device = 'Linux PC';
+    } else if (/CrOS/.test(userAgent)) {
+        device = 'ChromeOS';
+    }
+
+    if (userAgent.indexOf("Edg") !== -1) {
+        browser = "Microsoft Edge";
+    } else if (userAgent.indexOf("Chrome") !== -1 && userAgent.indexOf("Edg") === -1) {
+        browser = "Google Chrome";
+    } else if (userAgent.indexOf("Safari") !== -1) {
+        browser = "Safari";
+    } else if (userAgent.indexOf("Firefox") !== -1) {
+        browser = "Mozilla Firefox";
+    } else if (userAgent.indexOf("Trident") !== -1 || userAgent.indexOf("MSIE") !== -1) {
+        browser = "Internet Explorer";
+    }
+
+    return `System: ${device}, Browser: ${browser}`;
+}
+		
+        // Helper: Convert "HH:MM" string to minutes from midnight
+        function timeToMinutes(timeStr) {
+            if (!timeStr) return 0;
+            const [hours, minutes] = timeStr.split(':').map(Number);
+            return (hours * 60) + minutes;
+        }
+
+        // Helper: Convert minutes to decimal hours (two decimal places)
+        function minutesToDecimalHours(minutes) {
+            return (minutes / 60);
+        }
+        
+        // Helper: Format hours for display
+function formatHours(minutes) {
+    if (!Number.isFinite(minutes)) {
+        return '0.00';
+    }
+    return minutesToDecimalHours(minutes).toFixed(2);
+}
+        
+        // Helper: Format hours for the print form (blank if zero)
+        function formatHoursForPrint(minutes) {
+            return minutes > 0.01 ? minutesToDecimalHours(minutes).toFixed(2) : '';
+        }
+
+        function showMessageBox(title, message, closable = false) {
+            const box = document.getElementById('message-box');
+            document.getElementById('message-text').innerHTML = `<strong>${title}:</strong> ${message}`;
+            const closeBtn = document.getElementById('message-close-btn');
+            if (closable) {
+                closeBtn.classList.remove('hidden');
+                closeBtn.onclick = hideMessageBox;
+            } else {
+                closeBtn.classList.add('hidden');
+            }
+            box.classList.remove('hidden');
+        }
+
+        function hideMessageBox() {
+            document.getElementById('message-box').classList.add('hidden');
+        }
+        
+        // --- NEW HELPERS FOR WEEKLY HOURS ---
+        
+        function getMonday(dateStr) {
+            const d = new Date(dateStr);
+            const day = d.getDay();
+            const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+            const monday = new Date(d.setDate(diff));
+            return monday.toISOString().split('T')[0];
+        }
+
+        function getWeeklyPaidMinutes(targetDateStr) {
+            const targetDate = new Date(targetDateStr);
+            const mondayStr = getMonday(targetDateStr);
+            const mondayDate = new Date(mondayStr);
+            const nextMondayDate = new Date(mondayDate);
+            nextMondayDate.setDate(mondayDate.getDate() + 7);
+
+            let totalMinutes = 0;
+
+            Object.keys(userShifts).forEach(dateKey => {
+                // Skip the specific date we are currently editing
+                if (dateKey === targetDateStr) return;
+
+                const shiftDate = new Date(dateKey);
+                // Check if this shift falls within the target week (Mon <= Date < Next Mon)
+                if (shiftDate >= mondayDate && shiftDate < nextMondayDate) {
+                    totalMinutes += userShifts[dateKey].totalPaidMinutes || 0;
+                }
+            });
+
+            return totalMinutes;
+        }
+
+        // --- LOCAL STORAGE DATA HANDLING ---
+
+        function loadInitialData() {
+            const storedProfile = localStorage.getItem(PROFILE_KEY);
+            if (storedProfile) {
+                try {
+                    const parsedProfile = JSON.parse(storedProfile);
+                    userProfile = {
+                        name: parsedProfile.name || '',
+                        payrollNumber: parsedProfile.payrollNumber || '',
+                        userEmail: parsedProfile.userEmail || 'username@emailaddr',
+                        contractedHours: parseFloat(parsedProfile.contractedHours) || 37.5
+                    };
+                    
+                    document.getElementById('userName').value = userProfile.name;
+                    document.getElementById('payrollNumber').value = userProfile.payrollNumber;
+                    document.getElementById('userEmail').value = userProfile.userEmail;
+
+                    const hours = userProfile.contractedHours;
+                    const select = document.getElementById('contractedHoursSelect');
+                    const customInput = document.getElementById('customContractedHours');
+
+                    const options = Array.from(select.options).map(opt => opt.value);
+                    if (options.includes(String(hours))) {
+                        select.value = String(hours);
+                        document.getElementById('customHoursInputContainer').classList.add('hidden');
+                    } else {
+                        select.value = 'custom';
+                        customInput.value = hours;
+                        document.getElementById('customHoursInputContainer').classList.remove('hidden');
+                    }
+
+
+                } catch (e) {
+                    console.error("Error parsing stored profile:", e);
+                }
+            } else {
+                userProfile.userEmail = 'username@emailaddr';
+                document.getElementById('userEmail').value = 'username@emailaddr';
+                document.getElementById('contractedHoursSelect').value = '37.5';
+            }
+            
+            updateProfileDisplay();
+
+            const storedShifts = localStorage.getItem(SHIFTS_KEY);
+            if (storedShifts) {
+                try {
+                    userShifts = JSON.parse(storedShifts);
+                } catch (e) {
+                    console.error("Error parsing stored shifts:", e);
+                    userShifts = {};
+                }
+            }
+
+            renderCalendar();
+        }
+        
+        function updateProfileDisplay() {
+            const inputSection = document.getElementById('profile-input-section');
+            const displaySection = document.getElementById('displayed-profile-section');
+            
+            if (userProfile.name && userProfile.payrollNumber) {
+                document.getElementById('display-userName').textContent = userProfile.name;
+                document.getElementById('display-payrollNumber').textContent = userProfile.payrollNumber;
+                document.getElementById('display-userEmail').textContent = userProfile.userEmail; 
+                document.getElementById('display-contractedHours').textContent = `${userProfile.contractedHours} Hours`;
+                document.getElementById('device-info').textContent = detectDeviceAndBrowser();
+				
+                displaySection.classList.remove('hidden');
+                inputSection.classList.add('hidden');
+            } else {
+                inputSection.classList.remove('hidden');
+                displaySection.classList.add('hidden');
+            }
+        }
+        
+        window.checkCustomContractedHours = function() {
+            const select = document.getElementById('contractedHoursSelect');
+            const customContainer = document.getElementById('customHoursInputContainer');
+            if (select.value === 'custom') {
+                customContainer.classList.remove('hidden');
+            } else {
+                customContainer.classList.add('hidden');
+            }
+        }
+
+        window.editProfile = function() {
+            document.getElementById('userName').value = userProfile.name || '';
+            document.getElementById('payrollNumber').value = userProfile.payrollNumber || '';
+            document.getElementById('userEmail').value = userProfile.userEmail || 'username@emailaddr';
+            
+            const hours = userProfile.contractedHours;
+            const select = document.getElementById('contractedHoursSelect');
+            const customInput = document.getElementById('customContractedHours');
+            const customContainer = document.getElementById('customHoursInputContainer');
+
+            const options = Array.from(select.options).map(opt => opt.value);
+            if (options.includes(String(hours))) {
+                select.value = String(hours);
+                customContainer.classList.add('hidden');
+            } else {
+                select.value = 'custom';
+                customInput.value = hours;
+                customContainer.classList.remove('hidden');
+            }
+            
+            document.getElementById('profile-input-section').classList.remove('hidden');
+            document.getElementById('displayed-profile-section').classList.add('hidden');
+        }
+
+        window.saveProfile = function() {
+            const name = document.getElementById('userName').value.trim();
+            const payrollNumber = document.getElementById('payrollNumber').value.trim();
+            const userEmail = document.getElementById('userEmail').value.trim();
+            
+            // Handle Contracted Hours Logic
+            const hoursSelect = document.getElementById('contractedHoursSelect').value;
+            let contractedHours;
+
+            if (hoursSelect === 'custom') {
+                const customHoursInput = document.getElementById('customContractedHours').value;
+                contractedHours = parseFloat(customHoursInput) || 37.5; 
+            } else {
+                contractedHours = parseFloat(hoursSelect) || 37.5;
+            }
+            
+            // --- VALIDATION START ---
+
+            // 1. Check if fields are empty
+            if (!name || !payrollNumber || !userEmail) {
+                showMessageBox("Input Required", "Please enter your Name, Payroll Number, and Email Address before saving.", true);
+                return;
+            }
+
+            // 2. Check for Valid Email Format
+            // This Regex checks for: [characters]@[characters].[characters]
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            
+            if (!emailRegex.test(userEmail)) {
+                showMessageBox("Invalid Email", "The email address entered is invalid. Please check for typos (e.g., missing '@' or '.com').", true);
+                return;
+            }
+
+            // --- VALIDATION END ---
+
+            userProfile = {
+                name: name,
+                payrollNumber: payrollNumber,
+                userEmail: userEmail,
+                contractedHours: contractedHours
+            };
+
+            try {
+                localStorage.setItem(PROFILE_KEY, JSON.stringify(userProfile));
+                showMessageBox("Success", "Profile details saved successfully.", true);
+            } catch (error) {
+                showMessageBox("Error", "Could not save profile.", true);
+            }
+            
+            updateProfileDisplay();
+        }
+
+        function saveShiftsToLocalStorage() {
+            try {
+                localStorage.setItem(SHIFTS_KEY, JSON.stringify(userShifts));
+            } catch (error) {
+                console.error("Error saving shifts:", error);
+            }
+        }
+        
+        // --- CALENDAR RENDERING ---
+
+        function renderCalendar() {
+            const date = new Date(currentYear, currentMonth, 1);
+            const monthYearDisplay = document.getElementById('current-month-year');
+            const grid = document.getElementById('calendar-grid');
+            const monthName = date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+            monthYearDisplay.textContent = monthName;
+            grid.innerHTML = '';
+            
+            let startDay = date.getDay(); 
+            startDay = startDay === 0 ? 6 : startDay - 1;
+
+            const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+            
+            for (let i = 0; i < startDay; i++) {
+                grid.innerHTML += '<div class="calendar-day day-disabled"></div>';
+            }
+
+            for (let i = 1; i <= daysInMonth; i++) {
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+                const shift = userShifts[dateStr];
+                const className = getShiftClass(shift, new Date(dateStr));
+                
+                let shiftInfoHtml = '';
+                if (shift) {
+                    const paidHours = formatHours(shift.totalPaidMinutes);
+                    
+                    // Check if times are different from standard
+                    const isNonStandard = shift.startTime !== '07:20' || shift.finishTime !== '20:30';
+                    
+                    // --- UPDATED LOGIC START ---
+                    let displayLabel = shift.shiftType;
+                    const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+                    const isPartTime = contractHrs < 37.5;
+                    
+                    // If Part Time and the shift type is Overtime
+                    if (isPartTime && displayLabel === 'Overtime') {
+                        // Check if this specific shift triggered enhanced overtime (crossed 37.5h)
+                        // If partTimeOvertimeMinutes > 0, they have crossed the threshold -> Display "Overtime"
+                        // If partTimeOvertimeMinutes is 0 or undefined, they are just over contract -> Display "Extra Hours"
+                        if ((shift.partTimeOvertimeMinutes || 0) > 0) {
+                            displayLabel = 'Overtime';
+                        } else {
+                            displayLabel = 'Extra Hours';
+                        }
+                    }
+                    // --- UPDATED LOGIC END ---
+                    
+                    const titleText = displayLabel + (isNonStandard ? ' !' : '');
+                    
+                    shiftInfoHtml = `
+                        <div class="mt-1 text-xs font-bold text-gray-900 leading-tight">${titleText}</div>
+                        <div class="text-[11px] font-medium text-gray-600">${shift.startTime}-${shift.finishTime}</div>
+                        <div class="text-xs font-bold text-indigo-700">${paidHours} Hrs</div>
+                    `;
+                }
+
+                grid.innerHTML += `
+                    <div class="calendar-day ${className}" data-date="${dateStr}" onclick="showShiftModal('${dateStr}')">
+                        <span class="font-bold text-lg">${i}</span>
+                        ${shiftInfoHtml}
+                    </div>
+                `;
+            }
+            
+            document.getElementById('clear-month-text').textContent = monthName + "'s";
+        }
+		
+        function getShiftClass(shift, date) {
+			if (!shift) return 'bg-white';
+				const dayOfWeek = date.getDay();
+				switch (shift.shiftType) {
+					case 'Standard':
+						if (dayOfWeek === 0 || dayOfWeek === 6) return 'shift-weekend-default';
+						const isModified = shift.earlyStartMinutes > 0 || shift.extraTimeWorkedMinutes > 0 || shift.lateStartMinutes > 0 || shift.earlyFinishMinutes > 0;
+						return isModified ? 'shift-standard-modified' : 'shift-standard-default';
+					case 'Overtime':
+						return 'shift-overtime-default';
+					case 'Bank Holiday':
+						return 'shift-bank-holiday';
+					case 'Bank Holiday Overtime':
+						return 'shift-bh-ot-default';
+					case 'Study Leave/Other': // New case
+						return 'shift-study-leave';
+					default:
+						return 'bg-white';
+				}
+		}
+        
+        // --- SHIFT MODAL LOGIC (UPDATED WITH LOOK-BACK) ---
+
+        window.showShiftModal = function(dateStr) {
+            if (!userProfile.name || !userProfile.payrollNumber) {
+                showMessageBox("Input Required", "Please save your Name and Payroll Number in the profile section first.", true);
+                return;
+            }
+            selectedDate = dateStr;
+            const date = new Date(dateStr + 'T00:00:00');
+            
+            // --- 1. DYNAMIC LABEL UPDATE FOR PART TIME STAFF ---
+            const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+            const isPartTime = contractHrs < 37.5;
+            const otSpan = document.querySelector('input[value="Overtime"]').nextElementSibling;
+            if (otSpan) {
+                otSpan.textContent = isPartTime ? "Extra Hours / Overtime (Additional Shifts)" : "Overtime (Non-BH)";
+            }
+            
+            // --- 2. CHECK WEEKLY HOURS (AUTO-DETECT EXTRA HOURS) ---
+            const shift = userShifts[dateStr];
+            let defaultType = "Standard";
+            
+            if (!shift && isPartTime) {
+                const minutesSoFar = getWeeklyPaidMinutes(dateStr);
+                const contractedMinutes = contractHrs * 60;
+                
+                // If they have already worked their hours, default to Extra Hours
+                if (minutesSoFar >= contractedMinutes) {
+                    defaultType = "Overtime"; 
+                }
+            }
+            
+            document.getElementById('modal-date-display').textContent = `Shift Details for ${date.toDateString()}`;
+            
+            const form = document.getElementById('shift-form');
+            const deleteBtn = document.getElementById('delete-shift-btn');
+
+            if (shift) {
+                document.getElementById('startTime').value = shift.startTime;
+                document.getElementById('finishTime').value = shift.finishTime;
+                document.getElementById('breaksCount').value = shift.breaksCount;
+                // Load Notes
+                document.getElementById('shiftNotes').value = shift.notes || '';
+                document.querySelector(`input[name="shiftType"][value="${shift.shiftType}"]`).checked = true;
+                deleteBtn.classList.remove('hidden');
+                
+                shift.deviation = {
+                    earlyStartEnhancement: shift.earlyStartEnhancement,
+                    lateFinishEnhancement: shift.lateFinishEnhancement,
+                    lateStartAdjustment: shift.lateStartAdjustment,
+                    earlyFinishAdjustment: shift.earlyFinishAdjustment
+                };
+            } else {
+                form.reset();
+                document.getElementById('startTime').value = '07:20';
+                document.getElementById('finishTime').value = '20:30';
+                document.getElementById('breaksCount').value = '2';
+                // Clear Notes
+                document.getElementById('shiftNotes').value = '';
+                
+                // Apply the auto-detected type
+                document.querySelector(`input[name="shiftType"][value="${defaultType}"]`).checked = true;
+
+                if (userShifts[dateStr]) {
+                    delete userShifts[dateStr].deviation;
+                }
+                deleteBtn.classList.add('hidden');
+            }
+            
+            form.onsubmit = handleSaveShift;
+            calculateEnhancements(); 
+            document.getElementById('shift-modal').classList.remove('hidden');
+        }
+
+        window.closeShiftModal = function() {
+            document.getElementById('shift-modal').classList.add('hidden');
+            selectedDate = null;
+        }
+        
+        window.clearAllShifts = function() {
+            const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+            const shiftsToKeep = {};
+            
+            Object.keys(userShifts).forEach(dateStr => {
+                if (!dateStr.startsWith(yearMonthPrefix)) {
+                    shiftsToKeep[dateStr] = userShifts[dateStr];
+                }
+            });
+            
+            if (Object.keys(userShifts).length === Object.keys(shiftsToKeep).length) {
+                showMessageBox("No Shifts", "There are no shifts recorded for the current month.", true);
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete ALL shifts for the current month?`)) {
+                userShifts = shiftsToKeep;
+                saveShiftsToLocalStorage();
+                showMessageBox("Success", "All shifts for the current month have been deleted.", true);
+                renderCalendar();
+            }
+        }
+
+        // --- CORE CALCULATIONS (UPDATED WITH WEEKLY STATUS) ---
+        
+		window.calculateEnhancements = function() {
+    if (!selectedDate) return;
+
+    // --- 1. GET SETTINGS & INPUTS ---
+    const deviationData = userShifts[selectedDate]?.deviation || {};
+    
+    // Existing deviation settings
+    const currentEarlyStartVal = document.getElementById('earlyStartEnhancement')?.value;
+    const currentLateFinishVal = document.getElementById('lateFinishEnhancement')?.value;
+    const currentLateStartVal = document.getElementById('lateStartAdjustment')?.value;
+    const currentEarlyFinishVal = document.getElementById('earlyFinishAdjustment')?.value;
+    
+    // Part Time Action
+    const currentPtOtAction = document.getElementById('partTimeOvertimeAction')?.value;
+    
+    // Full Time Overtime Action
+    const currentFtOtAction = document.getElementById('fullTimeOvertimeAction')?.value;
+
+    const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+    const startTimeStr = document.getElementById('startTime').value;
+    const finishTimeStr = document.getElementById('finishTime').value;
+    const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+    
+    // Contract Checks
+    const contractHrs = parseFloat(userProfile.contractedHours) || 37.5;
+    const isPartTime = contractHrs < 37.5;
+    const FULL_TIME_MINUTES = 2250; // 37.5 Hours
+    
+    const otLabel = isPartTime ? 'Record as Extra Hours' : 'Record as Overtime';
+    const defaultPositiveDeviation = isPartTime ? 'Overtime' : 'Toil'; 
+
+    if (!startTimeStr || !finishTimeStr) {
+        document.getElementById('enhancement-display').innerHTML = '<p class="text-red-600">Please enter valid times.</p>';
+        return;
+    }
+
+    // --- 2. TIME CALCULATIONS ---
+    const startMinutes = timeToMinutes(startTimeStr);
+    const finishMinutes = timeToMinutes(finishTimeStr);
+    
+    // Auto-show breaks section
+    const breakSection = document.getElementById('breaks-section');
+    if (startMinutes > timeToMinutes('13:00') || finishMinutes < timeToMinutes('19:00')) {
+        breakSection.classList.remove('hidden');
+    } else {
+        breakSection.classList.add('hidden');
+        document.getElementById('breaksCount').value = '2'; 
+    }
+    const totalBreaksMinutes = breaksCount * 20;
+
+    let totalShiftMinutes = finishMinutes > startMinutes ? finishMinutes - startMinutes : (1440 - startMinutes) + finishMinutes;
+    const totalPaidMinutes = Math.max(0, totalShiftMinutes - totalBreaksMinutes);
+
+    // WEEKLY CUMULATIVE CALCULATION
+    const previousWeeklyMinutes = getWeeklyPaidMinutes(selectedDate);
+    const currentTotalWeeklyMinutes = previousWeeklyMinutes + totalPaidMinutes;
+    const contractMinutes = contractHrs * 60;
+    const isOverContract = currentTotalWeeklyMinutes > contractMinutes;
+
+    // Part Time Threshold Logic
+    let partTimeExtraMinutes = 0; 
+    let partTimeOvertimeMinutes = 0; 
+    let isCrossingFullTimeThreshold = false;
+
+    if (isPartTime) {
+        if (currentTotalWeeklyMinutes > FULL_TIME_MINUTES) {
+            const minutesAlreadyOver = Math.max(0, previousWeeklyMinutes - FULL_TIME_MINUTES);
+            partTimeOvertimeMinutes = Math.min(totalPaidMinutes, currentTotalWeeklyMinutes - FULL_TIME_MINUTES - minutesAlreadyOver);
+            partTimeExtraMinutes = totalPaidMinutes - partTimeOvertimeMinutes;
+            isCrossingFullTimeThreshold = partTimeOvertimeMinutes > 0;
+        } else {
+            partTimeExtraMinutes = totalPaidMinutes;
+        }
+    }
+
+    // --- 3. ENHANCEMENT LOGIC ---
+    const enhancements = {
+        earlyStartMinutes: Math.max(0, DEFAULT_START_TIME_MINUTES - startMinutes),
+        lateStartMinutes: Math.max(0, startMinutes - DEFAULT_START_TIME_MINUTES),
+        earlyFinishMinutes: Math.max(0, DEFAULT_END_TIME_MINUTES - finishMinutes),
+        extraTimeWorkedMinutes: Math.max(0, finishMinutes - DEFAULT_END_TIME_MINUTES),
+        nightDuty: 0,
+        weekendEnhancement: 0,
+        bankHolidayEnhancement: 0,
+        totalPaidMinutes: totalPaidMinutes,
+        partTimeExtraMinutes: partTimeExtraMinutes,
+        partTimeOvertimeMinutes: partTimeOvertimeMinutes
+    };
+
+    const date = new Date(selectedDate);
+    const dayOfWeek = date.getDay(); 
+
+    // Standard / Night / Weekend Calculations
+    if (shiftType !== 'Overtime' && shiftType !== 'Bank Holiday Overtime') {
+        
+        // A. Night Duty (Capped at 20:30)
+        if (dayOfWeek >= 1 && dayOfWeek <= 5) {
+            const nightStart = 1200; 
+            const effectiveNightFinish = Math.min(finishMinutes, DEFAULT_END_TIME_MINUTES);
+            if (effectiveNightFinish > nightStart) {
+                enhancements.nightDuty = Math.max(0, effectiveNightFinish - Math.max(startMinutes, nightStart));
+            }
+        }
+
+        if (dayOfWeek === 6 || dayOfWeek === 0) enhancements.weekendEnhancement = totalPaidMinutes;
+    }
+    
+    // B. Bank Holiday (Standard)
+    // Updated Logic: Only the BASE hours go to Bank Holiday Enhancement. 
+    // Extra time (early start/late finish) is excluded here because it is handled by the deviation selectors.
+    if (shiftType === 'Bank Holiday') {
+        const baseBHMinutes = Math.max(0, totalPaidMinutes - enhancements.earlyStartMinutes - enhancements.extraTimeWorkedMinutes);
+        enhancements.bankHolidayEnhancement = baseBHMinutes;
+    }
+
+    // --- 4. DEVIATION & DISPLAY ---
+    const deviationSetup = {
+        earlyStartEnhancement: currentEarlyStartVal || deviationData.earlyStartEnhancement || defaultPositiveDeviation, 
+        lateFinishEnhancement: currentLateFinishVal || deviationData.lateFinishEnhancement || defaultPositiveDeviation,
+        lateStartAdjustment: currentLateStartVal || deviationData.lateStartAdjustment || 'Neg Toil',
+        earlyFinishAdjustment: currentEarlyFinishVal || deviationData.earlyFinishAdjustment || 'Neg Toil',
+        partTimeOvertimeAction: currentPtOtAction || deviationData.partTimeOvertimeAction || 'Overtime',
+        fullTimeOvertimeAction: currentFtOtAction || deviationData.fullTimeOvertimeAction || 'Overtime'
+    };
+
+    const displayDiv = document.getElementById('enhancement-display');
+    let html = ``;
+
+    // Status Bar
+    const percent = Math.min(100, (currentTotalWeeklyMinutes / contractMinutes) * 100);
+    const colorClass = isOverContract ? 'text-purple-700 bg-purple-50' : 'text-green-700 bg-green-50';
+    
+    html += `
+        <div class="mb-3 p-2 rounded border ${isOverContract ? 'border-purple-200' : 'border-green-200'} ${colorClass} text-xs">
+            <p class="font-bold flex justify-between">
+                <span>Weekly Total:</span>
+                <span>${formatHours(currentTotalWeeklyMinutes)} / ${formatHours(contractMinutes)} Hrs</span>
+            </p>
+            <div class="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                <div class="${isOverContract ? 'bg-purple-600' : 'bg-green-600'} h-1.5 rounded-full" style="width: ${percent}%"></div>
+            </div>
+            ${!isPartTime && isOverContract && shiftType === 'Standard' ? 
+              '<p class="mt-1 font-bold text-red-600">⚠ Contract exceeded. Should this shift be Overtime?</p>' : ''}
+        </div>
+    `;
+
+    html += `<p>Total Paid Time: <span class="font-bold">${formatHours(totalPaidMinutes)} hrs</span></p>`;
+    
+    if (enhancements.nightDuty > 0) html += `<p>• Night Duty (20:00-20:30): <strong>${formatHours(enhancements.nightDuty)} hrs</strong></p>`;
+    if (enhancements.weekendEnhancement > 0 && (shiftType === 'Standard' || isPartTime)) html += `<p>• Weekend: <strong>${formatHours(enhancements.weekendEnhancement)} hrs</strong></p>`;
+    
+    // Display Bank Holiday (Base Hours)
+    if (enhancements.bankHolidayEnhancement > 0) html += `<p>• Bank Holiday (Base): <strong>${formatHours(enhancements.bankHolidayEnhancement)} hrs</strong></p>`;
+
+    // Part Time Text Logic
+    if (isPartTime && (shiftType === 'Overtime' || isCrossingFullTimeThreshold)) {
+        if (partTimeOvertimeMinutes > 0) {
+            html += `<div class="mt-2 p-2 bg-indigo-100 rounded text-xs border border-indigo-200">
+                        <p class="font-bold text-indigo-800">Part Time 37.5h Threshold Exceeded</p>
+                        <ul class="list-disc list-inside mt-1">
+                            <li>Extra Hours (Plain Time): <strong>${formatHours(partTimeExtraMinutes)} hrs</strong></li>
+                            <li>Overtime/TOIL (Enhanced): <strong>${formatHours(partTimeOvertimeMinutes)} hrs</strong></li>
+                        </ul>
+                     </div>`;
+        } else {
+             html += `<p class="text-blue-700 text-sm mt-1">✔ Part Time: Recording as Extra Hours (Below 37.5h).</p>`;
+        }
+    }
+
+    const selectorContainer = document.getElementById('deviation-selectors');
+    selectorContainer.innerHTML = `<p class="font-bold text-lg mb-2 text-yellow-800">Time Deviation Management</p>`;
+    let hasDeviations = false;
+
+    const makeSelect = (id, label, currentVal, options) => {
+        const opts = options.map(o => `<option value="${o.val}" ${currentVal === o.val ? 'selected' : ''}>${o.txt}</option>`).join('');
+        return `<div><label class="block text-sm font-medium text-gray-700">${label}</label>
+                <select id="${id}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm p-2 border" onchange="calculateEnhancements()">${opts}</select></div>`;
+    };
+
+    // PT Selector
+    if (isPartTime && partTimeOvertimeMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('partTimeOvertimeAction', 
+            `<strong>Exceeded 37.5 hrs by ${formatHours(partTimeOvertimeMinutes)} hrs</strong>. Claim as:`, 
+            deviationSetup.partTimeOvertimeAction,
+            [{val: 'Overtime', txt: 'Overtime (Enhanced Rate)'}, {val: 'Toil', txt: 'TOIL'}]
+        );
+    }
+    
+    // Full Time Overtime Selector
+    if (!isPartTime && (shiftType === 'Overtime' || shiftType === 'Bank Holiday Overtime')) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('fullTimeOvertimeAction', 
+            `<strong>Whole Shift Action (${formatHours(totalPaidMinutes)} hrs):</strong>`, 
+            deviationSetup.fullTimeOvertimeAction,
+            [{val: 'Overtime', txt: '1. Payment (Overtime)'}, {val: 'Toil', txt: '2. TOIL'}]
+        );
+    }
+
+    // Locate this section inside calculateEnhancements()
+// Standard / BH / Study Leave Deviations
+if (shiftType === 'Standard' || shiftType === 'Bank Holiday' || shiftType === 'Study Leave/Other') {
+    
+    // 1. Early Start (Allowed for Study Leave)
+    if (enhancements.earlyStartMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('earlyStartEnhancement', `Early Start (${formatHours(enhancements.earlyStartMinutes)} hrs):`, deviationSetup.earlyStartEnhancement, 
+            [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+    }
+
+    // 2. Late Start (Hide for Study Leave)
+    if (enhancements.lateStartMinutes > 0 && shiftType !== 'Study Leave/Other') {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('lateStartAdjustment', `Late Start (-${formatHours(enhancements.lateStartMinutes)} hrs):`, deviationSetup.lateStartAdjustment,
+            [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+    }
+
+    // 3. Late Finish (Allowed for Study Leave)
+    if (enhancements.extraTimeWorkedMinutes > 0) {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('lateFinishEnhancement', `Late Finish (${formatHours(enhancements.extraTimeWorkedMinutes)} hrs):`, deviationSetup.lateFinishEnhancement, 
+            [{val: 'Toil', txt: '1. Record as Toil'}, {val: 'Overtime', txt: `2. ${otLabel}`}]);
+    }
+
+    // 4. Early Finish (Hide for Study Leave)
+    if (enhancements.earlyFinishMinutes > 0 && shiftType !== 'Study Leave/Other') {
+        hasDeviations = true;
+        selectorContainer.innerHTML += makeSelect('earlyFinishAdjustment', `Early Finish (-${formatHours(enhancements.earlyFinishMinutes)} hrs):`, deviationSetup.earlyFinishAdjustment,
+            [{val: 'Neg Toil', txt: '1. Deduct from Toil'}, {val: 'AL', txt: '2. Deduct from Annual Leave'}]);
+    }
+}
+
+    selectorContainer.classList.toggle('hidden', !hasDeviations);
+
+    displayDiv.innerHTML = html;
+    document.getElementById('shift-form').dataset.calculated = JSON.stringify({ ...enhancements, ...deviationSetup });
+}
+        
+        // --- SHIFT DATA HANDLING (LOCAL SAVE/DELETE) ---
+
+        window.handleSaveShift = async function(event) {
+            event.preventDefault();
+
+            if (!selectedDate || !userProfile.name) {
+                showMessageBox("Error", "Please select a date and save your profile first.", true);
+                return;
+            }
+
+            const shiftType = document.querySelector('input[name="shiftType"]:checked').value;
+            const startTime = document.getElementById('startTime').value;
+            const finishTime = document.getElementById('finishTime').value;
+            const breaksCount = parseInt(document.getElementById('breaksCount').value, 10);
+            
+            const calculatedData = JSON.parse(document.getElementById('shift-form').dataset.calculated || '{}');
+
+            const newShift = {
+                shiftType,
+                startTime,
+                finishTime,
+                breaksCount,
+                notes: document.getElementById('shiftNotes').value, // NEW: Save Notes
+                ...calculatedData,
+                userName: userProfile.name,
+                payrollNumber: userProfile.payrollNumber,
+                userEmail: userProfile.userEmail,
+                date: selectedDate,
+                contractedHours: userProfile.contractedHours
+            };
+
+            userShifts[selectedDate] = newShift;
+            saveShiftsToLocalStorage();
+
+            showMessageBox("Success", `Shift for ${selectedDate} saved as ${shiftType}.`, true);
+            closeShiftModal();
+            renderCalendar();
+        }
+
+
+        window.deleteShift = function() {
+            if (!selectedDate || !userShifts[selectedDate]) {
+                return;
+            }
+
+            if (confirm(`Are you sure you want to delete the shift for ${selectedDate}?`)) {
+                delete userShifts[selectedDate];
+                saveShiftsToLocalStorage();
+                showMessageBox("Success", `Shift for ${selectedDate} has been deleted.`, true);
+                closeShiftModal();
+                renderCalendar();
+            }
+        }
+        
+        // --- REPORT GENERATION ---
+
+window.generateReport = function() {
+    if (!userProfile.name || !userProfile.payrollNumber) {
+        showMessageBox("Error", "Please save your Name and Payroll Number in the profile section first.", true);
+        return;
+    }
+    
+    showMessageBox("Generating Report", "Calculating totals for the month. Please wait...", false);
+
+    setTimeout(() => {
+        const yearMonthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}`;
+        const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+        
+        const shiftsInMonth = Object.keys(userShifts)
+            .filter(dateStr => dateStr.startsWith(yearMonthPrefix))
+            .sort()
+            .map(dateStr => userShifts[dateStr]);
+
+        const totals = {
+            uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
+            extraHoursWorked: 0, 
+            otMonFri: 0, otSat: 0, otSun: 0, otBH: 0, 
+            totalPaidMinutes: 0, 
+            toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0, 
+        };
+
+        const detailedPrintShifts = [];
+        const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
+        
+        // CHECK PART TIME STATUS (< 37.5 hours)
+        const isPartTime = userProfile.contractedHours < 37.5;
+
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const shift = userShifts[dateStr];
+            const dateObj = new Date(dateStr);
+            const dayNamesArr = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+            const baseShift = {
+                date: dateStr,
+                weekday: dayNamesArr[dateObj.getDay()],
+                dayOfMonth: day,
+                shiftType: shift ? shift.shiftType : 'None',
+                startTime: shift ? shift.startTime : '',
+                finishTime: shift ? shift.finishTime : '',
+                notes: shift ? (shift.notes || '') : '',
+                uhSat: 0, uhSun: 0, uhNight: 0, uhBH: 0,
+                extraHours: 0, extraHoursWorked: 0,
+                otMonFri: 0, otSat: 0, otSun: 0, otBH: 0,
+                toilAccrued: 0, toilUsed: 0, annualLeaveUsed: 0
+            };
+
+            if (shift) {
+                const dayOfWeek = dateObj.getDay();
+                const totalPaidMinutes = shift.totalPaidMinutes || 0;
+                totals.totalPaidMinutes += totalPaidMinutes;
+
+                // --- CALCULATION LOGIC ---
+
+                let nightMins = shift.nightDuty || 0;
+                let satMins = (dayOfWeek === 6) ? totalPaidMinutes : 0;
+                let sunMins = (dayOfWeek === 0) ? totalPaidMinutes : 0;
+                
+                // --- CATEGORY 1: STANDARD & BANK HOLIDAY (Standard) ---
+                if (shift.shiftType === 'Standard' || shift.shiftType === 'Bank Holiday' || shift.shiftType === 'Study Leave/Other') {
+                    
+                    // 1. BASE UNSOCIAL HOURS
+                    // Calculate deviations to ensure we don't double count extra time in the Base Unsocial buckets
+                    let extraTimeMappedToOtOrToil = 0;
+                    if (shift.extraTimeWorkedMinutes > 0) extraTimeMappedToOtOrToil += shift.extraTimeWorkedMinutes;
+                    if (shift.earlyStartMinutes > 0) extraTimeMappedToOtOrToil += shift.earlyStartMinutes;
+
+                    // Standard Nights/Weekends
+                    if (shift.shiftType === 'Standard') {
+                        totals.uhNight += nightMins; baseShift.uhNight += nightMins;
+                        totals.uhSat += satMins;     baseShift.uhSat += satMins;
+                        totals.uhSun += sunMins;     baseShift.uhSun += sunMins;
+                    }
+
+                    // Bank Holiday (Standard) - Only Base Hours go to uhBH
+                    if (shift.shiftType === 'Bank Holiday') { 
+                        // The base hours are the total paid minus the extra bits (late finish/early start)
+                        // This applies regardless of whether the extra bits are OT or TOIL.
+                        const bhBaseMins = Math.max(0, totalPaidMinutes - extraTimeMappedToOtOrToil);
+                        totals.uhBH += bhBaseMins; 
+                        baseShift.uhBH += bhBaseMins; 
+                    }
+					
+					
+					
+
+                    // 2. DEVIATIONS (Extra time worked - Early Start / Late Finish)
+                    if (isPartTime && shift.extraTimeWorkedMinutes > 0) {
+                        // Part Time Deviation Logic
+                         if (shift.lateFinishEnhancement === 'Overtime') {
+                             baseShift.extraHoursWorked += shift.extraTimeWorkedMinutes;
+                             totals.extraHoursWorked += shift.extraTimeWorkedMinutes;
+                             baseShift.extraHours = baseShift.extraHoursWorked;
+                         } else if (shift.lateFinishEnhancement === 'Toil') {
+                             baseShift.toilAccrued += shift.extraTimeWorkedMinutes;
+                             totals.toilAccrued += shift.extraTimeWorkedMinutes;
+                         }
+                    } else if (!isPartTime) {
+                        // Full Time Deviation Logic
+                        if (shift.lateFinishEnhancement === 'Overtime' || shift.earlyStartEnhancement === 'Overtime') {
+                            let extraTime = 0;
+                            if (shift.lateFinishEnhancement === 'Overtime') extraTime += shift.extraTimeWorkedMinutes || 0;
+                            if (shift.earlyStartEnhancement === 'Overtime') extraTime += shift.earlyStartMinutes || 0;
+                            
+                            // MAPPING THE EXTRA TIME TO THE CORRECT OT COLUMN
+                            if (shift.shiftType === 'Bank Holiday') { 
+                                // Specific Requirement: BH Extra hours go to BH Overtime
+                                baseShift.otBH += extraTime; 
+                                totals.otBH += extraTime; 
+                            }
+                            else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += extraTime; totals.otMonFri += extraTime; }
+                            else if (dayOfWeek === 6) { baseShift.otSat += extraTime; totals.otSat += extraTime; }
+                            else if (dayOfWeek === 0) { baseShift.otSun += extraTime; totals.otSun += extraTime; }
+                        }
+                    }
+                    
+                    // TOIL Deviations
+                    if (shift.lateFinishEnhancement === 'Toil' && !isPartTime) { baseShift.toilAccrued += shift.extraTimeWorkedMinutes || 0; totals.toilAccrued += shift.extraTimeWorkedMinutes || 0; }
+                    if (shift.earlyStartEnhancement === 'Toil') { baseShift.toilAccrued += shift.earlyStartMinutes || 0; totals.toilAccrued += shift.earlyStartMinutes || 0; }
+                } 
+                
+                // --- CATEGORY 2: OVERTIME & BANK HOLIDAY OVERTIME ---
+                else if (shift.shiftType === 'Overtime' || shift.shiftType === 'Bank Holiday Overtime') {
+                    
+                    if (isPartTime) {
+                        // PART TIME LOGIC
+                        
+                        // FIX APPLIED HERE:
+                        // Check if partTimeExtraMinutes is defined (even if 0). 
+                        // If it is undefined, default to totalPaidMinutes.
+                        const ptExtra = (shift.partTimeExtraMinutes !== undefined) ? shift.partTimeExtraMinutes : totalPaidMinutes;
+                        
+                        const ptOt    = shift.partTimeOvertimeMinutes || 0;
+                        const ptAction = shift.partTimeOvertimeAction || 'Overtime'; 
+
+                        baseShift.extraHoursWorked += ptExtra;
+                        totals.extraHoursWorked += ptExtra;
+                        baseShift.extraHours = baseShift.extraHoursWorked;
+
+                        // --- NEW FIX START --- 
+                        // Add Unsocial Hours for the "Extra Hours" portion (Plain Time)
+                        if (ptExtra > 0) {
+                            // 1. Saturday
+                            if (dayOfWeek === 6) {
+                                const addSat = Math.min(satMins, ptExtra);
+                                baseShift.uhSat += addSat;
+                                totals.uhSat += addSat;
+                            }
+                            // 2. Sunday
+                            else if (dayOfWeek === 0) {
+                                const addSun = Math.min(sunMins, ptExtra);
+                                baseShift.uhSun += addSun;
+                                totals.uhSun += addSun;
+                            }
+                            // 3. Nights
+                            if (nightMins > 0) {
+                                const addNight = Math.min(nightMins, ptExtra);
+                                baseShift.uhNight += addNight;
+                                totals.uhNight += addNight;
+                            }
+                            // 4. Bank Holiday (Plain Time portion)
+                            if (shift.shiftType === 'Bank Holiday Overtime') {
+                                const addBH = Math.min(totalPaidMinutes, ptExtra); 
+                                baseShift.uhBH += addBH;
+                                totals.uhBH += addBH;
+                            }
+                        }
+                        // --- NEW FIX END ---
+
+                        if (ptOt > 0) {
+                            if (ptAction === 'Toil') {
+                                baseShift.toilAccrued += ptOt;
+                                totals.toilAccrued += ptOt;
+                            } else {
+                                if (shift.shiftType.includes('Bank Holiday')) { baseShift.otBH += ptOt; totals.otBH += ptOt; }
+                                else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += ptOt; totals.otMonFri += ptOt; }
+                                else if (dayOfWeek === 6) { baseShift.otSat += ptOt; totals.otSat += ptOt; }
+                                else if (dayOfWeek === 0) { baseShift.otSun += ptOt; totals.otSun += ptOt; }
+                            }
+                        }
+                    } else {
+                        // FULL TIME LOGIC
+                        // Check if they chose TOIL for this whole shift
+                        const ftAction = shift.fullTimeOvertimeAction || 'Overtime';
+                        
+                        if (ftAction === 'Toil') {
+                            baseShift.toilAccrued += totalPaidMinutes;
+                            totals.toilAccrued += totalPaidMinutes;
+                        } else {
+                            // Map to OVERTIME
+                            // If Bank Holiday Overtime, it ALL goes to otBH. None to uhBH.
+                            if (shift.shiftType === 'Bank Holiday Overtime') { 
+                                baseShift.otBH += totalPaidMinutes; 
+                                totals.otBH += totalPaidMinutes; 
+                            }
+                            else if (dayOfWeek >= 1 && dayOfWeek <= 5) { baseShift.otMonFri += totalPaidMinutes; totals.otMonFri += totalPaidMinutes; }
+                            else if (dayOfWeek === 6) { baseShift.otSat += totalPaidMinutes; totals.otSat += totalPaidMinutes; }
+                            else if (dayOfWeek === 0) { baseShift.otSun += totalPaidMinutes; totals.otSun += totalPaidMinutes; }
+                        }
+                    }
+
+                    // NOTE: Standard OT shifts (non-BH) DO NOT attract Paid Unsocial Hours on top of the OT payment.
+                    // This logic was removed to fix the Sunday Overtime double counting.
+                }
+                
+                // Common Deductions
+                if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
+                if (shift.earlyFinishAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.earlyFinishMinutes || 0; totals.toilUsed += shift.earlyFinishMinutes || 0; }
+                if (shift.lateStartAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.lateStartMinutes || 0; totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
+                if (shift.earlyFinishAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.earlyFinishMinutes || 0; totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+				
+				if (shift.shiftType !== 'Study Leave/Other') { // Wrap this in a condition
+						if (shift.lateStartAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.lateStartMinutes || 0; totals.toilUsed += shift.lateStartMinutes || 0; }
+						if (shift.earlyFinishAdjustment === 'Neg Toil') { baseShift.toilUsed += shift.earlyFinishMinutes || 0; totals.toilUsed += shift.earlyFinishMinutes || 0; }
+						if (shift.lateStartAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.lateStartMinutes || 0; totals.annualLeaveUsed += shift.lateStartMinutes || 0; }
+						if (shift.earlyFinishAdjustment === 'AL') { baseShift.annualLeaveUsed += shift.earlyFinishMinutes || 0; totals.annualLeaveUsed += shift.earlyFinishMinutes || 0; }
+					} else {
+						// Explicitly ensure they are 0 for Study Leave
+						baseShift.toilUsed = 0;
+						baseShift.annualLeaveUsed = 0;
+					}
+				
+				
+            }
+            detailedPrintShifts.push(baseShift);
+        }
+
+        // --- RENDER TABLE ---
+        const reportBody = document.getElementById('report-table-body');
+        reportBody.innerHTML = '';
+        
+        const reportData = [
+            { label: 'Unsocial Hrs (Sat)', value: totals.uhSat, color: 'text-orange-700', description: 'Total paid hours on Saturday.' },
+            { label: 'Unsocial Hrs (Sun)', value: totals.uhSun, color: 'text-orange-700', description: 'Total paid hours on Sunday.' },
+            { label: 'Unsocial Hrs (Night)', value: totals.uhNight, color: 'text-orange-700', description: 'Total night duty minutes (Mon-Fri 20:00+).' },
+            { label: 'Unsocial Hrs (Bank Hol)', value: totals.uhBH, color: 'text-orange-700', description: 'Total paid base hours on Bank Holiday.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'Overtime (Mon-Fri)', value: totals.otMonFri, color: 'text-red-700', description: 'Total Mon-Fri hours recorded as Overtime.' },
+            { label: 'Overtime (Sat)', value: totals.otSat, color: 'text-red-700', description: 'Total Saturday hours recorded as Overtime.' },
+            { label: 'Overtime (Sun)', value: totals.otSun, color: 'text-red-700', description: 'Total Sunday hours recorded as Overtime.' },
+            { label: 'Overtime (BH)', value: totals.otBH, color: 'text-red-700', description: 'Total Bank Holiday hours recorded as Overtime.' },
+            { label: 'Extra Time Worked (Part Time)', value: totals.extraHoursWorked, color: 'text-blue-700', description: 'Additional hours worked by Part Time staff.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'TOIL Accrued (+ Hours)', value: totals.toilAccrued, color: 'text-green-700', description: 'Hours assigned to TOIL.' },
+            { label: 'TOIL Used (- Hours)', value: totals.toilUsed, color: 'text-red-600', description: 'Hours deducted from TOIL.' },
+            { label: 'Annual Leave Used (- Hours)', value: totals.annualLeaveUsed, color: 'text-red-600', description: 'Hours deducted from AL.' },
+            { label: '---', value: 0, isDivider: true },
+            { label: 'GRAND TOTAL Paid Hours', value: totals.totalPaidMinutes, color: 'text-gray-900', description: 'Total paid hours for the month.', isTotal: true },
+        ];
+
+        reportData.forEach(item => {
+            if (item.isDivider) {
+                reportBody.innerHTML += `<tr><td colspan="3" class="h-4 border-b-2 border-gray-300"></td></tr>`;
+                return;
+            }
+            reportBody.innerHTML += `
+                <tr class="${item.isTotal ? 'bg-indigo-100 font-bold' : ''}">
+                    <td class="py-2 px-2 text-sm font-medium ${item.color}">${item.label}</td>
+                    <td class="py-2 px-2 text-sm font-bold text-right ${item.color}">${formatHours(item.value)}</td>
+                    <td class="py-2 px-2 text-xs text-gray-500 hidden md:table-cell">${item.description}</td>
+                </tr>
+            `;
+        });
+
+        // Detailed List Logic
+        const detailedList = document.getElementById('detailed-shift-list');
+        detailedList.innerHTML = '';
+        const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+        if (shiftsInMonth.length === 0) {
+            detailedList.innerHTML = '<p class="text-center text-gray-500 p-4">No shifts recorded for this month.</p>';
+        } else {
+            shiftsInMonth.forEach(shift => {
+                const dateObj = new Date(shift.date + 'T00:00:00');
+                const dayOfWeek = dayNames[dateObj.getDay()];
+                const paidHoursText = `<span class="text-indigo-600 font-semibold">${formatHours(shift.totalPaidMinutes)} Paid Hrs</span>`;
+                
+                let toilText = [];
+                if (shift.earlyStartMinutes > 0 && shift.earlyStartEnhancement === 'Toil') toilText.push(`+${formatHours(shift.earlyStartMinutes)} TOIL`);
+                if (shift.extraTimeWorkedMinutes > 0 && shift.lateFinishEnhancement === 'Toil') toilText.push(`+${formatHours(shift.extraTimeWorkedMinutes)} TOIL`);
+                if (shift.lateStartMinutes > 0 && shift.lateStartAdjustment === 'Neg Toil') toilText.push(`-${formatHours(shift.lateStartMinutes)} TOIL`);
+                
+                let otText = [];
+                const otLabel = isPartTime ? 'Extra Hrs' : 'OT';
+                
+                if (shift.shiftType.includes('Overtime')) otText.push(`${formatHours(shift.totalPaidMinutes)} ${otLabel}`);
+                if (shift.earlyStartEnhancement === 'Overtime') otText.push(`+${formatHours(shift.earlyStartMinutes)} ${otLabel}`);
+                if (shift.lateFinishEnhancement === 'Overtime') otText.push(`+${formatHours(shift.extraTimeWorkedMinutes)} ${otLabel}`);
+
+                let enhancements = [];
+                if (shift.nightDuty > 0 && (shift.shiftType === 'Standard' || isPartTime)) enhancements.push('Night Duty');
+                if ((dateObj.getDay()===6 || dateObj.getDay()===0) && (shift.shiftType === 'Standard' || isPartTime)) enhancements.push('Weekend Hrs');
+                if (shift.shiftType === 'Bank Holiday') enhancements.push('Bank Holiday');
+                
+                let notesHtml = shift.notes ? `<div class="mt-1 text-xs text-gray-500 italic border-t border-gray-100 pt-1">Note: ${shift.notes}</div>` : '';
+
+                detailedList.innerHTML += `
+                    <div class="p-3 rounded-xl border border-gray-300 bg-white shadow-sm">
+                        <p class="font-bold text-base text-gray-800">${dateObj.toDateString()} (${dayOfWeek})</p>
+                        <p class="text-xs text-gray-600"><strong>${shift.shiftType}</strong>: ${shift.startTime} - ${shift.finishTime}</p>
+                        <div class="mt-1 text-xs space-x-3">${paidHoursText} ${toilText.length?`<span class="text-green-700">${toilText.join(' / ')}</span>`:''} ${otText.length?`<span class="text-blue-600">${otText.join(' / ')}</span>`:''}
+                            ${enhancements.length > 0 ? `<span class="text-purple-600">${enhancements.join(', ')}</span>` : ''}
+                        </div>
+                        ${notesHtml}
+                    </div>
+                `;
+            });
+        }
+
+        currentReportData = { totals, shiftsInMonth: detailedPrintShifts, monthName };
+        
+        document.getElementById('report-title').textContent = `Monthly Shift Report for ${monthName}`;
+        document.getElementById('report-period').textContent = `Generated on ${new Date().toLocaleDateString('en-US', { dateStyle: 'medium' })}`;
+        
+        hideMessageBox();
+        prepareAndShowSendDialog();
+
+    }, 50);
+}
+
+
+
+window.closeReportModal = function() {
+    document.getElementById('report-modal').classList.add('hidden');
+}
+
+
+// --- NEW: SEND TO GOOGLE LOGIC ---
+
+function prepareAndShowSendDialog() {
+    const { shiftsInMonth } = currentReportData;
+    const tableBody = document.getElementById('send-data-preview-body');
+    tableBody.innerHTML = '';
+
+    // Removed localStorage call for URL
+
+    const activeShifts = shiftsInMonth.filter(s => s.shiftType !== 'None');
+
+    if (activeShifts.length === 0) {
+        tableBody.innerHTML = '<tr><td colspan="9" class="p-4 text-center">No data to send for this month.</td></tr>';
+    } else {
+        activeShifts.forEach(s => {
+            tableBody.innerHTML += `
+                <tr class="hover:bg-gray-100">
+                    <td class="p-2 whitespace-nowrap">${s.date} (${s.weekday})</td>
+                    <td class="p-2 text-xs truncate max-w-[100px]">${s.shiftType}</td>
+                    <td class="p-2">${s.startTime}-${s.finishTime}</td>
+                    <td class="p-2">${formatHoursForPrint(s.uhSat)}${formatHoursForPrint(s.uhSun)}${formatHoursForPrint(s.uhNight)}${formatHoursForPrint(s.uhBH)}</td>
+                    <td class="p-2">${formatHoursForPrint(s.extraHoursWorked)}</td>
+                    <td class="p-2">${formatHoursForPrint(s.otMonFri)}${formatHoursForPrint(s.otSat)}${formatHoursForPrint(s.otSun)}${formatHoursForPrint(s.otBH)}</td>
+                    <td class="p-2">${formatHoursForPrint(s.toilAccrued)} ${formatHoursForPrint(s.toilUsed)}</td>
+                    <td class="p-2">${formatHoursForPrint(s.annualLeaveUsed)}</td>
+                    <td class="p-2 italic text-xs text-gray-500 truncate max-w-[150px]">${s.notes}</td>
+                </tr>
+            `;
+        });
+    }
+
+    document.getElementById('send-data-modal').classList.remove('hidden');
+}
+
+function getPayloadData() {
+    const shiftsToSend = currentReportData.shiftsInMonth.filter(s => s.shiftType !== 'None');
+    
+    return {
+        user: {
+            name: userProfile.name,
+            assignmentNumber: userProfile.payrollNumber,
+            email: userProfile.userEmail
+        },
+        period: currentReportData.monthName,
+        generatedAt: new Date().toISOString(),
+        shifts: shiftsToSend.map(s => ({
+            date: s.date,
+            weekday: s.weekday,
+            shiftType: s.shiftType,
+            startTime: s.startTime,
+            finishTime: s.finishTime,
+            uhSat: minutesToDecimalHours(s.uhSat),
+            uhSun: minutesToDecimalHours(s.uhSun),
+            uhNight: minutesToDecimalHours(s.uhNight),
+            uhBH: minutesToDecimalHours(s.uhBH),
+            extraHoursWorked: minutesToDecimalHours(s.extraHoursWorked),
+            otMonFri: minutesToDecimalHours(s.otMonFri),
+            otSat: minutesToDecimalHours(s.otSat),
+            otSun: minutesToDecimalHours(s.otSun),
+            otBH: minutesToDecimalHours(s.otBH),
+            toilAccrued: minutesToDecimalHours(s.toilAccrued),
+            toilUsed: minutesToDecimalHours(s.toilUsed),
+            annualLeaveUsed: minutesToDecimalHours(s.annualLeaveUsed),
+            notes: s.notes
+        }))
+    };
+}
+
+function sendDataToGoogle() {
+    // This grabs the text inside the element with id="xyz"
+    const url = document.getElementById('xyz').innerText.trim();
+    
+    if (!url) {
+        alert("Error: Webhook URL not found in HTML (id='xyz').");
+        return;
+    }
+    
+    const btn = document.getElementById('btn-send-gas');
+    const originalText = btn.innerText;
+    btn.innerText = "Sending...";
+    btn.disabled = true;
+    btn.classList.add('opacity-50');
+
+    const payload = getPayloadData();
+
+    fetch(url, {
+        method: 'POST',
+        mode: 'no-cors', 
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(() => {
+        alert("Data sent!");
+        document.getElementById('send-data-modal').classList.add('hidden');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert("Error sending data. Please try again later or contact the mri supers.");
+    })
+    .finally(() => {
+        btn.innerText = originalText;
+        btn.disabled = false;
+        btn.classList.remove('opacity-50');
+    });
+}
+    
+        // --- DATA BACKUP & RESTORE FUNCTIONS ---
+
+        // 1. Triggered by the "Backup to File" button
+        window.backupData = function() {
+            // Check if there is data to backup
+            if (!userProfile.name && Object.keys(userShifts).length === 0) {
+                showMessageBox("No Data", "There is no profile or shift data to backup.", true);
+                return;
+            }
+            // Show the recommendation modal instead of downloading immediately
+            document.getElementById('backup-modal').classList.remove('hidden');
+        }
+
+        // 2. Triggered by the "Save" button inside the modal
+        window.executeBackupSave = async function() {
+            // Close the modal
+            document.getElementById('backup-modal').classList.add('hidden');
+
+            // Create the data object
+            const backupObject = {
+                version: "1.0",
+                timestamp: new Date().toISOString(),
+                profile: userProfile,
+                shifts: userShifts
+            };
+
+            const dataStr = JSON.stringify(backupObject, null, 2); 
+            
+            // Generate a filename
+            const date = new Date();
+            const dateString = date.toISOString().split('T')[0];
+            const fileName = `ShiftTracker_Backup_${userProfile.name || 'User'}_${dateString}.json`;
+
+            // Detect support for File System Access API (Desktop "Save As" dialog)
+            // Note: This API works in Chrome/Edge on Desktop.
+            if (window.showSaveFilePicker) {
+                try {
+                    const handle = await window.showSaveFilePicker({
+                        suggestedName: fileName,
+                        types: [{
+                            description: 'JSON Files',
+                            accept: { 'application/json': ['.json'] },
+                        }],
+                    });
+                    
+                    const writable = await handle.createWritable();
+                    await writable.write(dataStr);
+                    await writable.close();
+                    return; // Exit if successful
+                } catch (err) {
+                    // If user cancels the picker, do nothing. 
+                    // If it fails for another reason, fall back to the blob method below.
+                    if (err.name === 'AbortError') return;
+                    console.warn("File System API failed, falling back to standard download", err);
+                }
+            }
+
+            // Fallback (Mobile or browsers without File System API)
+            // This creates a blob and triggers a standard download
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        window.restoreData = function(inputElement) {
+            const file = inputElement.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+
+            reader.onload = function(e) {
+                try {
+                    const content = e.target.result;
+                    const parsedData = JSON.parse(content);
+
+                    // Basic Validation: Check if it looks like our backup file
+                    if (!parsedData.profile && !parsedData.shifts) {
+                        throw new Error("Invalid file format");
+                    }
+
+                    // Confirm before overwriting
+                    if (confirm("WARNING: This will overwrite your current profile and shifts with the data from the backup file.\n\nDo you want to proceed?")) {
+                        
+                        // Restore Profile
+                        if (parsedData.profile) {
+                            localStorage.setItem(PROFILE_KEY, JSON.stringify(parsedData.profile));
+                        }
+                        
+                        // Restore Shifts
+                        if (parsedData.shifts) {
+                            localStorage.setItem(SHIFTS_KEY, JSON.stringify(parsedData.shifts));
+                        }
+
+                        alert("Data restored successfully! The page will now reload.");
+                        location.reload(); // Reload to apply changes
+                    }
+                } catch (error) {
+                    showMessageBox("Restore Error", "Failed to load data. The file may be corrupt or invalid.<br>Error: " + error.message, true);
+                }
+                
+                // Clear the input so the same file can be selected again if needed
+                inputElement.value = '';
+            };
+
+            reader.readAsText(file);
+        }
+
+        // ------------------------------------
+
+        window.changeMonth = function(delta) {
+            currentMonth += delta;
+            if (currentMonth > 11) {
+                currentMonth = 0;
+                currentYear++;
+            } else if (currentMonth < 0) {
+                currentMonth = 11;
+                currentYear--;
+            }
+            renderCalendar();
+        }
+
+        // --- INITIALIZATION ---
+        window.onload = function() {
+            const today = new Date();
+            currentYear = today.getFullYear();
+            currentMonth = today.getMonth();
+
+            loadInitialData();
+        };
+
+        // Expose functions globally for HTML
+        window.saveProfile = saveProfile;
+        window.showShiftModal = showShiftModal;
+        window.closeShiftModal = closeShiftModal;
+        window.calculateEnhancements = calculateEnhancements;
+        window.deleteShift = deleteShift;
+        window.generateReport = generateReport;
+        window.closeReportModal = closeReportModal;
+        window.editProfile = editProfile; 
+        window.clearAllShifts = clearAllShifts; 
+        window.checkCustomContractedHours = checkCustomContractedHours;
+        window.prepareAndShowSendDialog = prepareAndShowSendDialog;
+        window.sendDataToGoogle = sendDataToGoogle;
+        window.backupData = backupData;
+        window.executeBackupSave = executeBackupSave;
+        window.restoreData = restoreData;
+    </script>
+</body>
+</html>
