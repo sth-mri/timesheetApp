@@ -57,8 +57,13 @@
         /* Study Leave / Other */
         .shift-study-leave { background-color: #cffafe; } /* Light Cyan (Cyan 100) */
         
-        /* NEW: On-Call Duty Only */
+        /* On-Call Duty Only */
         .shift-oncall-only { background-color: #bfdbfe; border: 2px solid #3b82f6; } /* Blue 200 */
+
+        /* NEW: Bank Holiday Marker */
+        .is-bank-holiday {
+            border: 3px solid #f59e0b !important; /* Thicker Amber 500 border */
+        }
     </style>
 </head>
 <body class="p-4 md:p-8">
@@ -69,7 +74,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_V7_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_V8_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -487,6 +492,9 @@
         let selectedDate = null;
         let currentReportData = { totals: {}, shiftsInMonth:[], monthName: '' }; 
         let currentOnCallReportData = { duties:[], callouts:[], monthName: '' }; 
+        
+        // NEW: Store UK Bank Holidays retrieved from API
+        let bankHolidays = new Set();
 
         // Standard shift times
         const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
@@ -577,6 +585,22 @@
             });
 
             return totalMinutes;
+        }
+
+        // --- NEW: FETCH BANK HOLIDAYS ---
+        async function fetchBankHolidays() {
+            try {
+                const response = await fetch('https://www.gov.uk/bank-holidays.json');
+                const data = await response.json();
+                // Pulling for England and Wales (standard default)
+                const events = data['england-and-wales'].events; 
+                events.forEach(event => {
+                    bankHolidays.add(event.date);
+                });
+                renderCalendar(); // Re-render the calendar once loaded to apply highlights
+            } catch (error) {
+                console.error('Failed to fetch bank holidays from Gov.uk API:', error);
+            }
         }
 
         // --- LOCAL STORAGE DATA HANDLING ---
@@ -700,6 +724,12 @@
                 let className = 'bg-white';
                 let shiftInfoHtml = '';
 
+                // NEW: Bank Holiday Identifier Check
+                const isBankHoliday = bankHolidays.has(dateStr);
+                const bhIndicator = isBankHoliday 
+                    ? `<div class="absolute top-1 right-1 text-[10px] font-extrabold text-amber-700 bg-amber-100 border border-amber-300 px-1 rounded shadow-sm" title="Bank Holiday">BH</div>` 
+                    : '';
+
                 if (shift) {
                     if (shift.dutyMode === 'oncall_only') {
                         className = 'shift-oncall-only';
@@ -732,9 +762,15 @@
                     }
                 }
 
+                // Add bank holiday CSS class if it is a matched date
+                if (isBankHoliday) {
+                    className += ' is-bank-holiday';
+                }
+
                 grid.innerHTML += `
                     <div class="calendar-day ${className}" data-date="${dateStr}" onclick="showShiftModal('${dateStr}')">
                         <span class="font-bold text-lg">${i}</span>
+                        ${bhIndicator}
                         ${shiftInfoHtml}
                     </div>
                 `;
@@ -764,7 +800,7 @@
             hiddenInput.value = mode;
 
             const slider = document.getElementById('duty-slider');
-            const positions = ['4px', '34%', '67%'];
+            const positions =['4px', '34%', '67%'];
             slider.style.left = positions[index];
 
             const modes =['shift', 'shift_oncall', 'oncall_only'];
@@ -1566,6 +1602,9 @@
             currentYear = today.getFullYear();
             currentMonth = today.getMonth();
             loadInitialData();
+            
+            // Trigger fetch for Bank Holidays immediately on load
+            fetchBankHolidays();
         };
     </script>
 </body>
