@@ -17,13 +17,15 @@
 
         /* Custom calendar styling with @apply */
         .calendar-day {
-            min-height: 100px;
+            min-height: 75px; /* Shorter for mobile */
             cursor: pointer;
             transition: all 0.2s;
-            @apply border border-gray-200 p-2 rounded-lg relative text-sm;
+            @apply border border-gray-200 p-1 md:p-2 rounded relative;
+        }
+        @media (min-width: 768px) {
+            .calendar-day { min-height: 100px; } /* Normal size for desktop */
         }
 
-        /* Using Tailwind's arbitrary variant notation for the :not() selector */
         .calendar-day:hover:not(.day-disabled) {
             @apply shadow-md scale-[1.01] bg-gray-50;
         }
@@ -34,39 +36,39 @@
         }
 
         /* --- COLOR-CODING BASED ON SHIFT TYPE AND MODIFICATION --- */
-        
-        /* Standard Weekday (Mon-Fri) */
         .shift-standard-default { background-color: #d1fae5; } 
         .shift-standard-modified { background-color: #6ee7b7; } 
-        
-        /* Standard Weekend (Sat/Sun) */
         .shift-weekend-default { background-color: #ffe4c4; } 
         .shift-weekend-modified { background-color: #fdba74; } 
-        
-        /* General Overtime (Non-BH) */
         .shift-overtime-default { background-color: #fbcfe8; } 
         .shift-overtime-modified { background-color: #f472b6; } 
-        
-        /* Bank Holiday Overtime */
         .shift-bh-ot-default { background-color: #f3e8ff; } 
         .shift-bh-ot-modified { background-color: #c084fc; } 
-        
-        /* Bank Holiday (Standard Hours) */
         .shift-bank-holiday { background-color: #e2e8f0; } 
-
-        /* Study Leave / Other */
-        .shift-study-leave { background-color: #cffafe; } /* Light Cyan (Cyan 100) */
+        .shift-study-leave { background-color: #cffafe; }
         
-        /* On-Call Duty Only */
-        .shift-oncall-only { background-color: #bfdbfe; border: 2px solid #3b82f6; } /* Blue 200 */
+        /* Removed the border from here, as the new border classes will handle it */
+        .shift-oncall-only { background-color: #bfdbfe; } 
 
-        /* NEW: Bank Holiday Marker */
-        .is-bank-holiday {
-            border: 3px solid #f59e0b !important; /* Thicker Amber 500 border */
+        /* --- NEW: STATUS BORDERS (BH & ON-CALL) --- */
+        
+        /* Single Status Borders */
+        .border-bh { border: 3px solid #f59e0b !important; } /* Amber 500 */
+        .border-oc-standby { border: 3px solid #3b82f6 !important; } /* Blue 500 */
+        .border-oc-active { border: 3px solid #1e3a8a !important; } /* Blue 900 (Dark) */
+
+        /* Combined Status Borders (Outer Gold, Inner Blue) */
+        .border-bh-oc-standby {
+            border: 3px solid #f59e0b !important; 
+            box-shadow: inset 0 0 0 3px #3b82f6 !important; 
+        }
+        .border-bh-oc-active {
+            border: 3px solid #f59e0b !important; 
+            box-shadow: inset 0 0 0 3px #1e3a8a !important; 
         }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-1 md:p-8 bg-gray-100">
 
     <div id="app" class="max-w-4xl mx-auto">
         <header class="mb-2">
@@ -74,7 +76,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_V9_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_v10_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -154,19 +156,19 @@
             </button>
         </div>
 
-        <div class="bg-white p-6 rounded-xl shadow-lg">
+        <div class="bg-white p-2 md:p-6 rounded-xl shadow-lg">
             <div class="flex justify-between items-center mb-6">
                 <button onclick="changeMonth(-1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5 8.25 12 15.75 4.5" /></svg></button>
                 <h2 id="current-month-year" class="text-3xl font-bold text-gray-900"></h2>
                 <button onclick="changeMonth(1)" class="p-2 rounded-full hover:bg-gray-100 transition"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5 15.75 12 8.25 19.5" /></svg></button>
             </div>
             
-            <div class="grid grid-cols-7 gap-1 text-center font-medium text-gray-600 mb-2">
-                <div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
-            </div>
+            <div class="grid grid-cols-7 gap-0.5 md:gap-1 text-center font-bold text-gray-600 mb-2 text-xs md:text-base">
+				<div>Mon</div><div>Tue</div><div>Wed</div><div>Thu</div><div>Fri</div><div>Sat</div><div>Sun</div>
+			</div>
 
-            <div id="calendar-grid" class="grid grid-cols-7 gap-1">
-            </div>
+			<div id="calendar-grid" class="grid grid-cols-7 gap-0.5 md:gap-1">
+			</div>
             
             <div class="mt-6 pt-4 border-t border-gray-200">
                 <h3 class="text-lg font-bold text-gray-700 mb-3">Data Management</h3>
@@ -795,23 +797,24 @@
                 let className = 'bg-white';
                 let shiftInfoHtml = '';
 
-                // NEW: Bank Holiday Identifier Check
+                // Check Bank Holiday
                 const isBankHoliday = bankHolidays.has(dateStr);
                 const bhIndicator = isBankHoliday 
-                    ? `<div class="absolute top-1 right-1 text-[10px] font-extrabold text-amber-700 bg-amber-100 border border-amber-300 px-1 rounded shadow-sm" title="Bank Holiday">BH</div>` 
+                    // Changed top-1 right-1 to top-1.5 right-1.5 to stay clear of the thick borders
+                    ? `<div class="absolute top-1.5 right-1.5 text-[10px] font-extrabold text-amber-700 bg-amber-100 border border-amber-300 px-1 rounded shadow-sm z-10" title="Bank Holiday">BH</div>` 
                     : '';
 
+                let hasOnCall = false;
+                let hasCallOuts = false;
+
                 if (shift) {
-                    if (shift.dutyMode === 'oncall_only') {
-                        className = 'shift-oncall-only';
-                    } else {
-                        className = getShiftClass(shift, new Date(dateStr));
-                    }
+                    hasOnCall = (shift.dutyMode === 'shift_oncall' || shift.dutyMode === 'oncall_only');
+                    hasCallOuts = (shift.callOuts && shift.callOuts.length > 0);
 
                     if (shift.dutyMode === 'oncall_only') {
                         shiftInfoHtml = `
-                            <div class="mt-2 text-xs font-bold text-blue-900 bg-blue-100 rounded px-1 text-center">On-Call Duty</div>
-                            ${shift.callOuts && shift.callOuts.length > 0 ? `<div class="text-[10px] text-blue-800 text-center mt-1">(${shift.callOuts.length} calls)</div>` : ''}
+                            <div class="mt-1 md:mt-2 text-[9px] md:text-xs font-bold text-blue-900 bg-blue-100 rounded px-0.5 md:px-1 text-center leading-tight">On-Call</div>
+                            ${hasCallOuts ? `<div class="text-[8px] md:text-[10px] text-blue-800 text-center mt-0.5 md:mt-1">(${shift.callOuts.length} calls)</div>` : ''}
                         `;
                     } else {
                         const paidHours = formatHours(shift.totalPaidMinutes);
@@ -820,29 +823,35 @@
                         const isPartTime = contractHrs < 37.5;
                         
                         if (isPartTime && displayLabel === 'Overtime') {
-                            displayLabel = (shift.partTimeOvertimeMinutes || 0) > 0 ? 'Overtime' : 'Extra Hours';
+                            displayLabel = (shift.partTimeOvertimeMinutes || 0) > 0 ? 'Overtime' : 'Extra Hrs';
                         }
                         
-                        const onCallIndicator = shift.dutyMode === 'shift_oncall' ? ' 📱' : '';
+                        const onCallIndicator = hasOnCall ? ' + OC' : '';
 
                         shiftInfoHtml = `
-                            <div class="mt-1 text-xs font-bold text-gray-900 leading-tight">${displayLabel}${onCallIndicator}</div>
-                            <div class="text-[11px] font-medium text-gray-600">${shift.startTime}-${shift.finishTime}</div>
-                            <div class="text-xs font-bold text-indigo-700">${paidHours} Hrs</div>
+                            <div class="mt-0.5 md:mt-1 text-[9px] md:text-xs font-bold text-gray-900 leading-none md:leading-tight overflow-hidden">${displayLabel}${onCallIndicator}</div>
+                            <div class="text-[8px] md:text-[11px] font-medium text-gray-600 mt-0.5 leading-none">${shift.startTime}-${shift.finishTime}</div>
+                            <div class="text-[9px] md:text-xs font-bold text-indigo-700 mt-0.5 leading-none">${paidHours}h</div>
                         `;
                     }
                 }
 
-                // Add bank holiday CSS class if it is a matched date
-                if (isBankHoliday) {
-                    className += ' is-bank-holiday';
+                // Determine Custom Border Classes
+                if (isBankHoliday && hasOnCall) {
+                    if (hasCallOuts) className += ' border-bh-oc-active';
+                    else className += ' border-bh-oc-standby';
+                } else if (hasOnCall) {
+                    if (hasCallOuts) className += ' border-oc-active';
+                    else className += ' border-oc-standby';
+                } else if (isBankHoliday) {
+                    className += ' border-bh';
                 }
 
                 grid.innerHTML += `
                     <div class="calendar-day ${className}" data-date="${dateStr}" onclick="showShiftModal('${dateStr}')">
-                        <span class="font-bold text-lg">${i}</span>
+                        <span class="font-bold text-sm md:text-lg relative z-10">${i}</span>
                         ${bhIndicator}
-                        ${shiftInfoHtml}
+                        <div class="relative z-10">${shiftInfoHtml}</div>
                     </div>
                 `;
             }
@@ -1268,7 +1277,7 @@
             }
             userShifts[selectedDate] = newShift;
             saveShiftsToLocalStorage();
-            showMessageBox("Success", "Shift saved.", true);
+            // showMessageBox("Success", "Shift saved.", true);
             closeShiftModal();
             renderCalendar();
         }
