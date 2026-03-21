@@ -74,7 +74,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_V8_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheet&oncall_V9_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -455,11 +455,24 @@
         </div>
     </div>
 
-    <!-- INFO MODAL -->
+<!-- INFO MODAL -->
     <div id="info-modal" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50 p-4">
         <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl p-6 transform transition-all duration-300">
             <h3 class="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">Info</h3>
-            <div class="text-gray-700 space-y-4 mb-6 text-sm leading-relaxed">
+            
+            <!-- NEW: Dynamic Announcement Container -->
+            <div id="announcement-container" class="hidden mb-6 p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+                <div class="flex items-center gap-2 mb-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-blue-600">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                    </svg>
+                    <h4 id="announcement-title" class="font-bold text-blue-800 text-lg"></h4>
+                </div>
+                <p id="announcement-body" class="text-sm text-blue-700 leading-relaxed"></p>
+            </div>
+            <!-- END NEW -->
+
+            <div class="text-gray-700 space-y-4 mb-6 text-sm leading-relaxed max-h-[40vh] overflow-y-auto pr-2">
                 <p class="font-semibold">How to use this app:</p>
                 <ul class="list-disc list-inside space-y-2 pl-2">
                     <li><span class="font-medium">Setup:</span> Enter details in "Your Details" and save.</li>
@@ -478,7 +491,12 @@
                     </li>
                 </ul>
             </div>
-            <div class="flex justify-end pt-2">
+            
+            <div class="flex justify-end pt-4 border-t space-x-3">
+                <!-- NEW: Acknowledge Button -->
+                <button id="btn-acknowledge" onclick="acknowledgeMessage()" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">
+                    I have read this
+                </button>
                 <button onclick="closeInfoModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">Close</button>
             </div>
         </div>
@@ -496,6 +514,10 @@
         // NEW: Store UK Bank Holidays retrieved from API
         let bankHolidays = new Set();
 
+		// New: Info Message option for announcements
+		const ANNOUNCEMENT_KEY = 'acknowledgedMessageId';
+        let currentRemoteMessageId = null;
+	
         // Standard shift times
         const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
         const DEFAULT_END_TIME_MINUTES = timeToMinutes('20:30');
@@ -554,7 +576,56 @@
         function hideMessageBox() {
             document.getElementById('message-box').classList.add('hidden');
         }
-        
+
+		// New code for showing/hiding the Info box when showing announcements
+		// --- NEW: FETCH ANNOUNCEMENTS ---
+        async function fetchAppAnnouncement() {
+            // REPLACE THIS URL with your actual raw.githubusercontent.com URL
+            const configUrl = 'https://raw.githubusercontent.com/YOUR_GITHUB_USER/YOUR_REPO/main/announcement.json';
+            
+            try {
+                // We add ?t=... to bypass aggressive GitHub Raw caching so the app gets updates instantly
+                const response = await fetch(configUrl + '?t=' + new Date().getTime());
+                if (!response.ok) return;
+                
+                const data = await response.json();
+                
+                if (data.showMessage === true && data.messageId) {
+                    currentRemoteMessageId = data.messageId;
+                    const acknowledgedId = localStorage.getItem(ANNOUNCEMENT_KEY);
+                    
+                    // Populate the modal
+                    document.getElementById('announcement-title').textContent = data.messageTitle || "Announcement";
+                    document.getElementById('announcement-body').innerHTML = data.messageBody;
+                    document.getElementById('announcement-container').classList.remove('hidden');
+                    
+                    // If the user hasn't acknowledged this specific message yet
+                    if (acknowledgedId !== currentRemoteMessageId) {
+                        document.getElementById('btn-acknowledge').classList.remove('hidden');
+                        openInfoModal(); // Auto-open the modal
+                    } else {
+                        // User already read it. Keep it in the Info modal, but hide the ack button.
+                        document.getElementById('btn-acknowledge').classList.add('hidden');
+                    }
+                } else {
+                    // If showMessage is false, hide the announcement container entirely
+                    document.getElementById('announcement-container').classList.add('hidden');
+                    document.getElementById('btn-acknowledge').classList.add('hidden');
+                }
+            } catch (error) {
+                console.log('No announcement fetched or error occurred:', error);
+            }
+        }
+
+        window.acknowledgeMessage = function() {
+            if (currentRemoteMessageId) {
+                // Save the message ID to local storage so it doesn't pop up again
+                localStorage.setItem(ANNOUNCEMENT_KEY, currentRemoteMessageId);
+            }
+            document.getElementById('btn-acknowledge').classList.add('hidden');
+            closeInfoModal();
+        }
+	
         function getMonday(dateStr) {
             const d = new Date(dateStr);
             const day = d.getDay();
@@ -1605,6 +1676,9 @@
             
             // Trigger fetch for Bank Holidays immediately on load
             fetchBankHolidays();
+
+			// NEW: Fetch App announcements
+            fetchAppAnnouncement();
         };
     </script>
 </body>
