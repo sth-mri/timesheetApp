@@ -473,7 +473,13 @@
                 <p id="announcement-body" class="text-sm text-blue-700 leading-relaxed"></p>
             </div>
             <!-- END NEW -->
-
+<div class="flex justify-end pt-4 border-t space-x-3">
+                <!-- NEW: Acknowledge Button -->
+                <button id="btn-acknowledge" onclick="acknowledgeMessage()" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">
+                    Ok
+                </button>
+                <button onclick="closeInfoModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">Close</button>
+            </div>
             <div class="text-gray-700 space-y-4 mb-6 text-sm leading-relaxed max-h-[40vh] overflow-y-auto pr-2">
                 <p class="font-semibold">How to use this app:</p>
                 <ul class="list-disc list-inside space-y-2 pl-2">
@@ -494,13 +500,7 @@
                 </ul>
             </div>
             
-            <div class="flex justify-end pt-4 border-t space-x-3">
-                <!-- NEW: Acknowledge Button -->
-                <button id="btn-acknowledge" onclick="acknowledgeMessage()" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">
-                    I have read this
-                </button>
-                <button onclick="closeInfoModal()" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition shadow-md">Close</button>
-            </div>
+            
         </div>
     </div>
 
