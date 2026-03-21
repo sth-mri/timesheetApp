@@ -1,6 +1,6 @@
 {
   "showMessage": true,
   "messageId": "v10_update_01",
-  "messageTitle": "Important Version 10 Update",
-  "messageBody": "You can now enter your shifts, oncall duties or both.<br>Please use the <b>Select Duty Mode</b> toggle at the top of the Shift Entry dialog box.<br>When you submit your shift data you can now also submit your oncall duty data!<br><br><b>What's New:</b><br><li><i>Added oncall logging</li><li>Bank Holidays now have a golden border</li><li>Oncall - standby have a light blue border</li><li>Oncall callouts have a dark blue border</li><li>Calendar should look better on mobile phones</li></i><br><br>"
+  "messageTitle": "Version 10 Update - log your oncall duties!",
+  "messageBody": "You can now enter your shifts, oncall duties or both.<br><br><b>What's New:</b><br><li><i>Added oncall logging</li><li>Bank Holidays now have a golden border</li><li>Oncall - standby have a light blue border</li><li>Oncall callouts have a dark blue border</li><li>Calendar should look better on mobile phones</li></i>"
 }
