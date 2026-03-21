@@ -1,0 +1,6 @@
+{
+  "showMessage": true,
+  "messageId": "v8_update_01",
+  "messageTitle": "Important Update",
+  "messageBody": "The timesheet app can now let you enter your shift, oncall duties or both. Please use the Select Duty Mode toggle at the top of the SHift Entry dialog box. At the end of the month or when you submit your shift data you will also need to submit your oncall duty data."
+}
