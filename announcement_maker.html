@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Announcement JSON Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; }
+    </style>
+</head>
+<body class="p-4 md:p-6 max-w-[1600px] mx-auto min-h-screen flex flex-col gap-6">
+
+    <header class="flex justify-between items-end border-b pb-4 border-gray-300">
+        <div>
+            <h1 class="text-3xl font-extrabold text-gray-800">📣 Announcement Maker</h1>
+            <p class="text-gray-600 mt-1">View the live message on the left, edit in the middle, and grab your JSON on the right.</p>
+        </div>
+        <div id="status-badge" class="px-3 py-1.5 bg-gray-200 text-gray-700 font-bold text-sm rounded-full flex items-center gap-2 shadow-inner">
+            <span class="w-2.5 h-2.5 rounded-full bg-gray-500 animate-pulse"></span> Loading live data...
+        </div>
+    </header>
+
+    <!-- MAIN 3-COLUMN DASHBOARD -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-grow items-start">
+
+        <!-- 1. LEFT COLUMN: CURRENT LIVE ANNOUNCEMENT -->
+        <div class="bg-indigo-50 border-2 border-indigo-200 p-5 rounded-xl shadow-md flex flex-col gap-5 sticky top-6">
+            <div class="border-b border-indigo-200 pb-2">
+                <h2 class="text-xl font-bold text-indigo-900 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 0 0 8.716-6.747M12 21a9.004 9.004 0 0 1-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 0 1 7.843 4.582M12 3a8.997 8.997 0 0 0-7.843 4.582m15.686 0A11.953 11.953 0 0 1 12 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0 1 21 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0 1 12 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 0 1 3 12c0-1.605.42-3.113 1.157-4.418" />
+                    </svg>
+                    1. Live on GitHub
+                </h2>
+            </div>
+
+            <div id="live-content-wrapper" class="hidden flex flex-col gap-5">
+                <!-- Meta Details -->
+                <div class="bg-white p-4 rounded-lg border border-indigo-100 shadow-sm space-y-3">
+                    <div>
+                        <span class="block text-xs font-bold text-indigo-500 uppercase">Message Flag</span>
+                        <span id="live-flag" class="inline-block mt-1 px-2 py-1 text-sm font-bold rounded"></span>
+                    </div>
+                    <div>
+                        <span class="block text-xs font-bold text-indigo-500 uppercase">Message ID</span>
+                        <span id="live-id" class="font-mono text-sm text-indigo-900 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 block mt-1 break-all"></span>
+                    </div>
+                    <div class="pt-3 border-t border-indigo-100 mt-1">
+                        <button onclick="copyLiveToEditor()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-bold shadow transition flex justify-center items-center gap-2">
+                            Load into Editor →
+                        </button>
+                        <p class="text-[11px] text-indigo-500 mt-1.5 text-center leading-tight">Click to copy this text to the editor.</p>
+                    </div>
+                </div>
+                
+                <!-- Live Preview -->
+                <div>
+                    <span class="block text-xs font-bold text-indigo-500 uppercase mb-1">Live Message Appearance</span>
+                    <div id="live-preview-box" class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm">
+                        <div class="flex items-center gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-blue-600 flex-shrink-0">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                            </svg>
+                            <h4 id="live-title" class="font-bold text-blue-800 text-lg leading-tight"></h4>
+                        </div>
+                        <p id="live-body" class="text-sm text-blue-700 leading-relaxed"></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. MIDDLE COLUMN: EDITOR -->
+        <div id="editor-column" class="bg-white p-5 rounded-xl shadow-lg border border-gray-200 flex flex-col h-full transition-all duration-300">
+            <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">2. Editor (Create/Modify)</h2>
+            
+            <div class="flex items-center mb-4 bg-gray-50 p-3 rounded border">
+                <input type="checkbox" id="showMessage" checked class="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" onchange="updatePreview()">
+                <label for="showMessage" class="ml-2 font-bold text-gray-700">Enable Announcement (showMessage)</label>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-gray-700 mb-1">Message ID <span class="text-[10px] font-normal text-gray-500 uppercase ml-1">(Change to force unread status)</span></label>
+                <div class="flex gap-2">
+                    <input type="text" id="messageId" placeholder="e.g., v10_update" class="flex-1 border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm" oninput="updatePreview()">
+                    <button onclick="generateNewId()" class="bg-amber-100 border border-amber-300 hover:bg-amber-200 text-amber-900 px-2 py-2 rounded font-bold text-xs transition">Gen New ID</button>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label class="block text-sm font-bold text-gray-700 mb-1">Message Title</label>
+                <input type="text" id="messageTitle" placeholder="e.g., Important Update" class="w-full border p-2 rounded focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-gray-800" oninput="updatePreview()">
+            </div>
+
+            <div class="mb-2 flex-grow flex flex-col">
+                <label class="block text-sm font-bold text-gray-700 mb-1">Message Body</label>
+                <div class="flex flex-wrap gap-1.5 mb-2 p-2 bg-gray-100 rounded border">
+                    <button onclick="wrapText('<b>', '</b>')" class="px-2.5 py-1 bg-white border rounded font-bold hover:bg-gray-50 shadow-sm text-sm">B</button>
+                    <button onclick="wrapText('<i>', '</i>')" class="px-2.5 py-1 bg-white border rounded italic hover:bg-gray-50 shadow-sm text-sm">I</button>
+                    <button onclick="wrapText('<ul>\n  <li>', '</li>\n</ul>')" class="px-2 py-1 bg-white border rounded text-xs font-semibold hover:bg-gray-50 shadow-sm">• List</button>
+                    <button onclick="wrapText('<li>', '</li>')" class="px-2 py-1 bg-white border rounded text-xs font-semibold hover:bg-gray-50 shadow-sm">+ Item</button>
+                    <div class="w-px bg-gray-300 mx-1"></div>
+                    <button onclick="wrapText('<span class=\'text-amber-600 font-bold\'>', '</span>')" class="px-2 py-1 bg-white border rounded text-xs font-semibold text-amber-600 hover:bg-amber-50 shadow-sm">Gold Text</button>
+                    <button onclick="wrapText('<span class=\'text-red-600 font-bold\'>', '</span>')" class="px-2 py-1 bg-white border rounded text-xs font-semibold text-red-600 hover:bg-red-50 shadow-sm">Red Text</button>
+                </div>
+                <textarea id="messageBody" class="w-full border p-3 rounded focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm flex-grow min-h-[300px]" oninput="updatePreview()" placeholder="Type your message here..."></textarea>
+            </div>
+            
+            <div class="mt-3 flex justify-end">
+                <button onclick="clearEditor()" class="text-xs text-red-600 font-bold hover:text-red-800 transition py-1 px-2 hover:bg-red-50 rounded">Clear Editor</button>
+            </div>
+        </div>
+
+        <!-- 3. RIGHT COLUMN: PREVIEW & OUTPUT -->
+        <div class="flex flex-col gap-6 h-full">
+            
+            <!-- Editor Live Preview -->
+            <div class="bg-white p-5 rounded-xl shadow-lg border border-gray-200">
+                <h2 class="text-xl font-bold text-gray-800 mb-4 border-b pb-2">3. Editor Preview</h2>
+                <div id="preview-container" class="p-4 bg-blue-50 border-l-4 border-blue-500 rounded-r-lg shadow-sm transition-all duration-300">
+                    <div class="flex items-center gap-2 mb-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5 text-blue-600 flex-shrink-0">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                        </svg>
+                        <h4 id="preview-title" class="font-bold text-blue-800 text-lg leading-tight">Title</h4>
+                    </div>
+                    <p id="preview-body" class="text-sm text-blue-700 leading-relaxed">Body</p>
+                </div>
+                <div id="preview-disabled" class="hidden text-center text-gray-500 italic p-4 bg-gray-50 rounded border border-dashed border-gray-300 text-sm">
+                    Announcement is disabled. Users will not see a popup.
+                </div>
+            </div>
+
+            <!-- JSON Output -->
+            <div class="bg-gray-800 p-5 rounded-xl shadow-lg flex-grow flex flex-col min-h-[250px]">
+                <div class="flex justify-between items-center mb-4 border-b border-gray-700 pb-3">
+                    <h2 class="text-xl font-bold text-white">4. Generated JSON</h2>
+                    <button onclick="copyToClipboard()" id="copyBtn" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 text-sm rounded font-bold shadow transition flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg>
+                        Copy
+                    </button>
+                </div>
+                <pre id="jsonOutput" class="text-green-400 font-mono text-xs whitespace-pre-wrap flex-grow overflow-auto"></pre>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        let liveData = null; // Store fetched data here
+
+        // --- 1. FETCH LIVE DATA FROM GITHUB ---
+        async function fetchLiveAnnouncement() {
+            const statusBadge = document.getElementById('status-badge');
+            const wrapper = document.getElementById('live-content-wrapper');
+            
+            const configUrl = 'https://raw.githubusercontent.com/sth-mri/timesheetApp/main/announcement.json';
+            
+            try {
+                const response = await fetch(configUrl + '?t=' + new Date().getTime());
+                if (!response.ok) throw new Error("Failed to fetch");
+                
+                liveData = await response.json();
+                
+                // Populate Live UI Element
+                const flagEl = document.getElementById('live-flag');
+                if(liveData.showMessage) {
+                    flagEl.textContent = "TRUE (Active)";
+                    flagEl.className = "inline-block mt-1 px-2 py-1 text-xs font-bold rounded bg-green-100 text-green-800 border border-green-300";
+                    document.getElementById('live-preview-box').classList.remove('opacity-50', 'grayscale');
+                } else {
+                    flagEl.textContent = "FALSE (Hidden)";
+                    flagEl.className = "inline-block mt-1 px-2 py-1 text-xs font-bold rounded bg-gray-200 text-gray-600 border border-gray-300";
+                    document.getElementById('live-preview-box').classList.add('opacity-50', 'grayscale');
+                }
+                
+                document.getElementById('live-id').textContent = liveData.messageId || 'N/A';
+                document.getElementById('live-title').innerHTML = liveData.messageTitle || '<em>No Title</em>';
+                document.getElementById('live-body').innerHTML = liveData.messageBody || '<em>No Body</em>';
+                
+                // Reveal the content
+                wrapper.classList.remove('hidden');
+                wrapper.classList.add('flex');
+
+                // Update Status Badge
+                statusBadge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-green-500 shadow-sm"></span> Live Data Loaded';
+                statusBadge.className = 'px-3 py-1.5 bg-green-100 text-green-800 font-bold text-sm rounded-full flex items-center gap-2 shadow-sm border border-green-200';
+
+            } catch (error) {
+                console.error('Error fetching live data:', error);
+                statusBadge.innerHTML = '<span class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-sm"></span> Connection Failed';
+                statusBadge.className = 'px-3 py-1.5 bg-red-100 text-red-800 font-bold text-sm rounded-full flex items-center gap-2 shadow-sm border border-red-200';
+            }
+        }
+
+        // Copy Live Data down into the Editor Inputs
+        function copyLiveToEditor() {
+            if (!liveData) return;
+            
+            document.getElementById('showMessage').checked = liveData.showMessage;
+            document.getElementById('messageId').value = liveData.messageId || '';
+            document.getElementById('messageTitle').value = liveData.messageTitle || '';
+            
+            // Convert HTML <br> tags back to actual line breaks (\n) for editing
+            let rawBody = liveData.messageBody || '';
+            rawBody = rawBody.replace(/<br\s*[\/]?>/gi, '\n');
+            document.getElementById('messageBody').value = rawBody;
+            
+            updatePreview();
+            
+            // Visual feedback - flash the editor column
+            const editorCol = document.getElementById('editor-column');
+            editorCol.classList.add('ring-4', 'ring-indigo-300');
+            setTimeout(() => editorCol.classList.remove('ring-4', 'ring-indigo-300'), 400);
+        }
+
+        function clearEditor() {
+            if(confirm("Clear all text in the editor?")) {
+                document.getElementById('showMessage').checked = true;
+                document.getElementById('messageId').value = '';
+                document.getElementById('messageTitle').value = '';
+                document.getElementById('messageBody').value = '';
+                updatePreview();
+            }
+        }
+
+        // --- 2. EDITOR FUNCTIONS ---
+
+        function generateNewId() {
+            const date = new Date();
+            const id = `update_${date.getFullYear()}${(date.getMonth()+1).toString().padStart(2,'0')}${date.getDate().toString().padStart(2,'0')}_${Math.floor(Math.random() * 1000)}`;
+            document.getElementById('messageId').value = id;
+            updatePreview();
+            
+            const idInput = document.getElementById('messageId');
+            idInput.classList.add('bg-amber-100');
+            setTimeout(() => idInput.classList.remove('bg-amber-100'), 500);
+        }
+
+        function wrapText(openTag, closeTag) {
+            const textarea = document.getElementById('messageBody');
+            const start = textarea.selectionStart;
+            const end = textarea.selectionEnd;
+            const text = textarea.value;
+            const selectedText = text.substring(start, end);
+            
+            const replacement = openTag + selectedText + closeTag;
+            textarea.value = text.substring(0, start) + replacement + text.substring(end);
+            
+            textarea.focus();
+            if (selectedText.length === 0) {
+                textarea.setSelectionRange(start + openTag.length, start + openTag.length);
+            } else {
+                textarea.setSelectionRange(start, start + replacement.length);
+            }
+            
+            updatePreview();
+        }
+
+        function updatePreview() {
+            const showMessage = document.getElementById('showMessage').checked;
+            const id = document.getElementById('messageId').value.trim();
+            const title = document.getElementById('messageTitle').value.trim();
+            
+            // Format for preview and JSON (convert real line breaks \n into HTML <br>)
+            let rawBody = document.getElementById('messageBody').value;
+            let htmlFormattedBody = rawBody.replace(/\n/g, '<br>');
+
+            // Update Preview Box
+            if (showMessage) {
+                document.getElementById('preview-container').classList.remove('hidden');
+                document.getElementById('preview-disabled').classList.add('hidden');
+                document.getElementById('preview-title').innerHTML = title || "<em>Title...</em>";
+                document.getElementById('preview-body').innerHTML = htmlFormattedBody || "<em>Body text...</em>";
+            } else {
+                document.getElementById('preview-container').classList.add('hidden');
+                document.getElementById('preview-disabled').classList.remove('hidden');
+            }
+
+            // Generate JSON Object
+            const jsonObj = {
+                showMessage: showMessage,
+                messageId: id,
+                messageTitle: title,
+                messageBody: htmlFormattedBody 
+            };
+
+            // Display formatted JSON
+            document.getElementById('jsonOutput').textContent = JSON.stringify(jsonObj, null, 2);
+            
+            // Reset copy button styling
+            const copyBtn = document.getElementById('copyBtn');
+            copyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0 0 13.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 0 1-.75.75H9a.75.75 0 0 1-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 0 1-2.25 2.25H6.75A2.25 2.25 0 0 1 4.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 0 1 1.927-.184" /></svg> Copy`;
+            copyBtn.className = "bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 text-sm rounded font-bold shadow transition flex items-center gap-1";
+        }
+
+        function copyToClipboard() {
+            const jsonText = document.getElementById('jsonOutput').textContent;
+            navigator.clipboard.writeText(jsonText).then(() => {
+                const btn = document.getElementById('copyBtn');
+                btn.innerHTML = `✔ Copied!`;
+                btn.className = "bg-gray-600 text-white px-3 py-1.5 text-sm rounded font-bold shadow transition flex items-center gap-1";
+                setTimeout(() => updatePreview(), 2000); // Resets button
+            });
+        }
+
+        // Initialization
+        window.onload = function() {
+            updatePreview(); // Sets initial blank JSON
+            fetchLiveAnnouncement(); // Grabs github data
+        };
+    </script>
+</body>
+</html>
