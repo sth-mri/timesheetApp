@@ -6,13 +6,13 @@ function onOpen() {
   ui.createMenu('📄 Timesheet Admin')
     .addItem('🚀 Process "Checked" Timesheets', 'processCheckedItems')
     .addSeparator()
-    .addItem('🔴 Highlight Missing Staff (Red)', 'admin_HighlightMissingStaffRed')
-    .addItem('🟢 Reset Staff List Colors', 'admin_ResetStaffListColors')
-    .addItem('📧 Send Reminders to Missing Staff', 'admin_SendReminders')
+    .addItem('🔴 Highlight missing staff (Red)', 'admin_HighlightMissingStaffRed')
+    .addItem('🟢 Reset staff list colours', 'admin_ResetStaffListColors')
+    .addItem('📧 Send email to missing staff (custom email msg)', 'admin_SendReminders')
     .addSeparator()
-    .addItem('🧹 Monthly Reset & Archive', 'archiveAndResetSpreadsheet')
+    .addItem('🔐 Re-authorise email permissions', 'checkEmailPermissions') 
     .addSeparator()
-    .addItem('🔐 Authorise Email Permissions', 'checkEmailPermissions') 
+    .addItem('🧹 +++ Monthly Reset & Archive +++', 'archiveAndResetSpreadsheet')
     .addToUi();
 
   SpreadsheetApp.getActiveSpreadsheet().toast(
