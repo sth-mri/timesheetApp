@@ -76,7 +76,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheet_oncall_v10_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheet_oncall_v11_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -170,6 +170,36 @@
 			<div id="calendar-grid" class="grid grid-cols-7 gap-0.5 md:gap-1">
 			</div>
             
+			<!-- NEW: SUBMISSION & STATUS TRACKER BAR -->
+            <div class="mt-8 border-t border-gray-200 pt-6">
+                <div class="bg-gradient-to-r from-indigo-50 to-blue-50 p-4 md:p-5 rounded-xl shadow-inner border border-indigo-100 flex flex-col md:flex-row justify-between items-center gap-4">
+                    
+                    <div class="flex flex-col text-sm items-center md:items-start w-full md:w-auto">
+                        <span class="font-bold text-indigo-900 mb-1 uppercase tracking-wider text-xs">Timesheet Submitted</span>
+                        <span id="display-last-submitted" class="bg-gray-200 text-gray-600 border border-gray-300 py-1 px-4 rounded-full font-bold inline-flex items-center shadow-sm">
+                            No record
+                        </span>
+                    </div>
+                    
+                    <div class="hidden md:block w-px h-10 bg-indigo-200"></div>
+                    <div class="block md:hidden w-full h-px bg-indigo-200"></div>
+
+                    <div class="flex flex-col text-sm items-center md:items-start w-full md:w-auto">
+                        <div class="flex items-center justify-between w-full md:justify-start gap-2 mb-1">
+                            <span class="font-bold text-indigo-900 uppercase tracking-wider text-xs">Current Status (<span id="status-period-label"></span>)</span>
+                            <button onclick="fetchStatusFromGoogle()" class="text-indigo-500 hover:text-indigo-800 transition bg-white rounded-full p-1 shadow-sm border border-indigo-100" title="Refresh Status">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5">
+                                  <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />
+                                </svg>
+                            </button>
+                        </div>
+                        <span id="display-current-status" class="bg-gray-200 text-gray-800 py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 shadow-sm border border-gray-300">
+                            Checking...
+                        </span>
+                    </div>
+                </div>
+            </div>
+			
             <div class="mt-6 pt-4 border-t border-gray-200">
                 <h3 class="text-lg font-bold text-gray-700 mb-3">Data Management</h3>
                 <div class="flex flex-wrap gap-4 mb-4">
@@ -197,6 +227,9 @@
                     </button>
                 </div>
             </div>
+            
+            
+
         </div>
         <div id="message-box" class="fixed inset-0 bg-gray-900 bg-opacity-70 flex items-center justify-center hidden z-50">
             <div class="bg-white p-6 rounded-lg shadow-2xl text-center">
@@ -528,6 +561,9 @@
 		// New: Info Message option for announcements
 		const ANNOUNCEMENT_KEY = 'acknowledgedMessageId';
         let currentRemoteMessageId = null;
+        
+        // NEW: Local tracking for submitted timestamps
+        let submissionLog = {};
 	
         // Standard shift times
         const DEFAULT_START_TIME_MINUTES = timeToMinutes('07:20');
@@ -535,6 +571,7 @@
 
         const PROFILE_KEY = 'userProfile';
         const SHIFTS_KEY = 'userShifts';
+        const SUBMISSION_LOG_KEY = 'submissionLog';
 
         // --- UTILITY FUNCTIONS ---
         
@@ -545,6 +582,7 @@
             if (confirm("WARNING: This will delete ALL shift history and your profile details.\n\nAre you sure?")) {
                 localStorage.removeItem('userShifts');
                 localStorage.removeItem('userProfile');
+                localStorage.removeItem('submissionLog');
                 location.reload();
             }
         }
@@ -716,10 +754,17 @@
                 } catch (e) { console.error(e); }
             }
             updateProfileDisplay();
+            
             const storedShifts = localStorage.getItem(SHIFTS_KEY);
             if (storedShifts) {
                 try { userShifts = JSON.parse(storedShifts); } catch (e) { userShifts = {}; }
             }
+            
+            const storedLog = localStorage.getItem(SUBMISSION_LOG_KEY);
+            if (storedLog) {
+                try { submissionLog = JSON.parse(storedLog); } catch (e) { submissionLog = {}; }
+            }
+
             renderCalendar();
         }
         
@@ -774,10 +819,76 @@
             localStorage.setItem(PROFILE_KEY, JSON.stringify(userProfile));
             showMessageBox("Success", "Profile details saved successfully.", true);
             updateProfileDisplay();
+            fetchStatusFromGoogle(); // Refresh status when profile is saved
         }
 
         function saveShiftsToLocalStorage() {
             localStorage.setItem(SHIFTS_KEY, JSON.stringify(userShifts));
+        }
+
+        // --- NEW: TRACK LOCAL SUBMISSIONS AND FETCH GOOGLE SHEET STATUS ---
+
+        function saveSubmissionTime(monthName) {
+            const now = new Date();
+            submissionLog[monthName] = now.toLocaleString('en-GB'); 
+            localStorage.setItem(SUBMISSION_LOG_KEY, JSON.stringify(submissionLog));
+            updateSubmissionTimeDisplay();
+        }
+
+        function updateSubmissionTimeDisplay() {
+            const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            const display = document.getElementById('display-last-submitted');
+            if (submissionLog[monthName]) {
+                display.innerText = submissionLog[monthName];
+            } else {
+                display.innerText = "Never / No record";
+            }
+        }
+
+        window.fetchStatusFromGoogle = async function() {
+            const url = document.getElementById('xyz').innerText.trim();
+            const statusDisplay = document.getElementById('display-current-status');
+            const periodLabel = document.getElementById('status-period-label');
+            const monthName = new Date(currentYear, currentMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+            
+            periodLabel.innerText = monthName;
+            
+            if (!userProfile.name || !userProfile.payrollNumber) {
+                statusDisplay.innerText = "Profile Setup Required";
+                statusDisplay.className = "py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 bg-gray-200 text-gray-800 shadow-sm";
+                return;
+            }
+            
+            statusDisplay.innerHTML = `<svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Checking...`;
+            statusDisplay.className = "py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 bg-indigo-100 text-indigo-700 shadow-sm";
+            
+            try {
+                // Perform a standard GET request to the Apps Script Web App
+                const queryUrl = `${url}?action=getStatus&name=${encodeURIComponent(userProfile.name)}&assignment=${encodeURIComponent(userProfile.payrollNumber)}&period=${encodeURIComponent(monthName)}`;
+                const response = await fetch(queryUrl, { method: 'GET' }); 
+                const data = await response.json();
+                
+                if (data.status) {
+                    let color = 'bg-gray-200 text-gray-800'; // Not Submitted fallback
+                    const s = data.status.toLowerCase();
+                    
+                    if (s === 'received') color = 'bg-blue-200 text-blue-900 border border-blue-300';
+                    if (s === 'checked') color = 'bg-yellow-200 text-yellow-900 border border-yellow-300';
+                    if (s === 'completed') color = 'bg-green-200 text-green-900 border border-green-300';
+                    if (s === 'amended after check' || s === 'failed check') color = 'bg-red-200 text-red-900 border border-red-300';
+                    if (s === 'pdf already saved') color = 'bg-emerald-200 text-emerald-900 border border-emerald-300';
+                    
+                    statusDisplay.className = `py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 shadow-sm ${color}`;
+                    statusDisplay.innerText = data.status;
+                } else {
+                    statusDisplay.className = "py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 bg-gray-200 text-gray-800 shadow-sm border border-gray-300";
+                    statusDisplay.innerText = "Not Submitted";
+                }
+            } catch (err) {
+                console.error("Status fetch error:", err);
+                statusDisplay.className = "py-1 px-4 rounded-full font-bold inline-flex items-center gap-2 bg-red-100 text-red-800 shadow-sm border border-red-200";
+                statusDisplay.innerText = "Error checking status";
+            }
         }
         
         // --- CALENDAR RENDERING ---
@@ -791,6 +902,10 @@
             monthYearDisplay.textContent = monthName;
             grid.innerHTML = '';
             
+            // Refresh Tracking Logs
+            updateSubmissionTimeDisplay();
+            fetchStatusFromGoogle();
+
             let startDay = date.getDay(); 
             startDay = startDay === 0 ? 6 : startDay - 1;
             const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
@@ -809,7 +924,6 @@
                 // Check Bank Holiday
                 const isBankHoliday = bankHolidays.has(dateStr);
                 const bhIndicator = isBankHoliday 
-                    // Changed top-1 right-1 to top-1.5 right-1.5 to stay clear of the thick borders
                     ? `<div class="absolute top-1.5 right-1.5 text-[10px] font-extrabold text-amber-700 bg-amber-100 border border-amber-300 px-1 rounded shadow-sm z-10" title="Bank Holiday">BH</div>` 
                     : '';
 
@@ -845,7 +959,6 @@
                     }
                 }
 
-                // Determine Custom Border Classes
                 if (isBankHoliday && hasOnCall) {
                     if (hasCallOuts) className += ' border-bh-oc-active';
                     else className += ' border-bh-oc-standby';
@@ -883,7 +996,6 @@
             }
         }
         
-        // --- NEW: TOGGLE LOGIC (UPDATED FOR SLIDING SWITCH) ---
         window.setDutyMode = function(mode, index) {
             const hiddenInput = document.getElementById('dutyMode');
             hiddenInput.value = mode;
@@ -904,7 +1016,6 @@
                 }
             });
 
-            // Update slider color for visual feedback
             if (mode === 'shift') slider.className = "absolute top-1 bottom-1 bg-white rounded-lg shadow-sm transition-all duration-300 w-[32%] border border-gray-200";
             if (mode === 'shift_oncall') slider.className = "absolute top-1 bottom-1 bg-amber-50 rounded-lg shadow-sm border border-amber-200 transition-all duration-300 w-[32%]";
             if (mode === 'oncall_only') slider.className = "absolute top-1 bottom-1 bg-blue-50 rounded-lg shadow-sm border border-blue-200 transition-all duration-300 w-[32%]";
@@ -981,8 +1092,6 @@
             display.innerText = text;
         }
 
-        // --- SHIFT MODAL LOGIC ---
-
         window.showShiftModal = function(dateStr) {
             if (!userProfile.name || !userProfile.payrollNumber) { showMessageBox("Input Required", "Please save your Name and Payroll Number first.", true); return; }
             selectedDate = dateStr;
@@ -1015,7 +1124,6 @@
             let mode = 'shift';
             if (shift) mode = shift.dutyMode || 'shift';
             
-            // Trigger the new sliding UI
             let modeIndex = 0;
             if (mode === 'shift_oncall') modeIndex = 1;
             if (mode === 'oncall_only') modeIndex = 2;
@@ -1064,8 +1172,6 @@
             }
         }
 
-        // --- CORE CALCULATIONS ---
-        
 		window.calculateEnhancements = function() {
             if (document.getElementById('dutyMode').value === 'oncall_only') return;
             if (!selectedDate) return;
@@ -1177,7 +1283,6 @@
             const displayDiv = document.getElementById('enhancement-display');
             let html = ``;
 
-            // Status Bar
             const percent = Math.min(100, (currentTotalWeeklyMinutes / contractMinutes) * 100);
             const colorClass = isOverContract ? 'text-purple-700 bg-purple-50' : 'text-green-700 bg-green-50';
             
@@ -1246,8 +1351,6 @@
             document.getElementById('shift-form').dataset.calculated = JSON.stringify({ ...enhancements, ...deviationSetup });
         }
         
-        // --- SHIFT DATA HANDLING ---
-
         window.handleSaveShift = async function(event) {
             event.preventDefault();
             if (!selectedDate) return;
@@ -1286,7 +1389,6 @@
             }
             userShifts[selectedDate] = newShift;
             saveShiftsToLocalStorage();
-            // showMessageBox("Success", "Shift saved.", true);
             closeShiftModal();
             renderCalendar();
         }
@@ -1300,8 +1402,6 @@
             }
         }
         
-        // --- REPORT GENERATION (Standard) ---
-
         window.generateReport = function() {
             if (!userProfile.name) { showMessageBox("Error", "Save profile first.", true); return; }
             
@@ -1494,7 +1594,6 @@
 
         window.closeReportModal = function() { document.getElementById('report-modal').classList.add('hidden'); }
 
-        // --- GENERATE ON-CALL REPORT ---
         window.generateOnCallReport = function() {
             if (!userProfile.name) { showMessageBox("Error", "Save profile first.", true); return; }
             showMessageBox("Generating...", "Calculating On-Call data...", false);
@@ -1644,6 +1743,11 @@
             }).then(() => {
                 alert("Data sent!");
                 document.getElementById('send-data-modal').classList.add('hidden');
+                
+                // --- NEW: Save local timestamp and refresh status ---
+                saveSubmissionTime(currentReportData.monthName);
+                fetchStatusFromGoogle();
+                
             }).catch(error => {
                 console.error('Error:', error);
                 alert("Error sending data.");
@@ -1695,7 +1799,7 @@
             // Trigger fetch for Bank Holidays immediately on load
             fetchBankHolidays();
 
-			// NEW: Fetch App announcements
+			// Fetch App announcements
             fetchAppAnnouncement();
         };
     </script>
