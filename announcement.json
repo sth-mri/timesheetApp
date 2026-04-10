@@ -1,6 +1,6 @@
 {
   "showMessage": true,
-  "messageId": "v10_update_02",
-  "messageTitle": "Version 10 Update - log your oncall duties!",
-  "messageBody": "You can now enter your shifts, oncall duties or both.<br><br><b>What's New:</b><br><li><i>Added oncall logging</li><li>Bank Holidays now have a golden border</li><li>Oncall - standby have a light blue border</li><li>Oncall callouts have a dark blue border</li><li>Calendar should look better on mobile phones</li></i>"
+  "messageId": "v11_update_01",
+  "messageTitle": "Version 11 Update!",
+  "messageBody": "<b>Improved submission tracking!</b><br>Just underneath the calendar entry are two small data fields. When you submit your data it now records the date/time that you submitted, and also shows what the status of your data is.<br>When you first send your data it will say \"Received\", When it has been checked it will say \"Checked\" (but might also say \"Failed\"!, and when the timesheet has been printed, it will say \"Completed\"<br><br>Hopefully this will be a bit more of a positive feedback so you know your data has made it to where it needs to be!"
 }
