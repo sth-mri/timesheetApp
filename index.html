@@ -291,13 +291,11 @@
                                 <span class="ml-2 text-gray-700">Overtime (Non-BH)</span>
                             </label>
                             <hr class="my-1 border-gray-100">
-							 <!-- +++++++ REMOVED AS REQUESTED: Bank Holiday (Standard Hours) UI -->
-                            <!-- 
-                            <label class="inline-flex items-center mr-4">
-                                <input type="radio" name="shiftType" value="Bank Holiday" class="form-radio text-blue-600 h-4 w-4" onchange="calculateEnhancements()">
+							 <!-- MODIFIED BELOW: Disabled and added tooltip -->
+                            <label class="inline-flex items-center mr-4 opacity-50 cursor-not-allowed" title="Use 'BH Overtime' for STH MRI BH shifts please">
+                                <input type="radio" name="shiftType" value="Bank Holiday" class="form-radio text-blue-600 h-4 w-4" disabled onchange="calculateEnhancements()">
                                 <span class="ml-2 text-gray-700">Bank Holiday (Standard Hours)</span>
                             </label>
-							-->
                             <label class="inline-flex items-center mr-4">
                                 <input type="radio" name="shiftType" value="Bank Holiday Overtime" class="form-radio text-purple-600 h-4 w-4" onchange="calculateEnhancements()">
                                 <span class="ml-2 text-gray-700">Bank Holiday Overtime</span>
