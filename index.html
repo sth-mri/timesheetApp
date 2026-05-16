@@ -66,7 +66,7 @@
         </header>
 		
 		<div class="flex items-center justify-between text-xs text-indigo-700 mt-1 mb-4">
-            <p class="font-medium">Version: <span class="font-normal">timesheet_oncall_v12_live</span></p>
+            <p class="font-medium">Version: <span class="font-normal">timesheet_oncall_v11a_live</span></p>
             <p id="device-info"></p> 
         </div>
 		
@@ -977,18 +977,27 @@
 		
         function getShiftClass(shift, date) {
             if (!shift) return 'bg-white';
-            const isModified = shift.earlyStartMinutes > 0 || 
-                               shift.extraTimeWorkedMinutes > 0 || 
-                               shift.lateStartMinutes > 0 || 
-                               shift.earlyFinishMinutes > 0;
+            
+            // Check if times deviate from default 07:20 - 20:30
+            let isModified = false;
+            if (shift.startTime && shift.finishTime) {
+                isModified = (shift.startTime !== '07:20' || shift.finishTime !== '20:30');
+            } else {
+                // Fallback logic for older saved data formats
+                isModified = shift.earlyStartMinutes > 0 || 
+                             shift.extraTimeWorkedMinutes > 0 || 
+                             shift.lateStartMinutes > 0 || 
+                             shift.earlyFinishMinutes > 0;
+            }
+
             switch (shift.shiftType) {
                 case 'Standard':
-                    return isModified ? '!bg-green-200' : '!bg-green-350';
+                    return isModified ? '!bg-green-100' : '!bg-green-200';
                 case 'Overtime': 
-                    return isModified ? '!bg-yellow-200' : '!bg-yellow-350';
+                    return isModified ? '!bg-yellow-100' : '!bg-yellow-200';
                 case 'Bank Holiday':
                 case 'Bank Holiday Overtime':
-                    return isModified ? '!bg-orange-200' : '!bg-orange-350';
+                    return isModified ? '!bg-orange-100' : '!bg-orange-200';
                 case 'Study Leave/Other': 
                     return '!bg-cyan-200';
                 default: 
