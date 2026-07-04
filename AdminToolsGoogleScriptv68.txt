@@ -175,43 +175,43 @@ function doPost(e) {
         sheet.getRange(2, 4, cleanRows.length, 2).setNumberFormat("@");
       }
 
-      // --- APPLY CONDITIONAL FORMATTING TO ACTIVE DATA ROWS ---
+      // --- APPLY GLOBAL CONDITIONAL FORMATTING RULES ---
       const rules = [];
-      if (cleanRows.length > 0) {
-        const activeRangeC = sheet.getRange(2, 3, cleanRows.length, 1);     // Column C (Type)
-        const activeRangeOS = sheet.getRange(2, 15, cleanRows.length, 5);  // Columns O to S (TOIL, AL, Notes, Timestamp)
+      const colCRange = sheet.getRange("C:C");  // Column C (Type)
+      const rangeOS = sheet.getRange("O:S");    // Columns O to S (TOIL, AL, Notes, Timestamp)
 
-        // Rule for TOIL, AL, Notes & Timestamp (Columns O to S) based on Column O having a value
-        const toilRule = SpreadsheetApp.newConditionalFormatRule()
-          .whenFormulaSatisfied('=$O2<>""')
-          .setBackground("#fce4ec") // Light pink
-          .setRanges([activeRangeOS])
-          .build();
-        rules.push(toilRule);
+      // Rule for TOIL, AL, Notes & Timestamp (Columns O to S) based on Column O having a value
+      const toilRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(ROW()>1, $O1<>"")')
+        .setBackground("#fce4ec") // Light pink
+        .setRanges([rangeOS])
+        .build();
+      rules.push(toilRule);
 
-        // Rules for Type column (Column C)
-        const bhOvertimeRule = SpreadsheetApp.newConditionalFormatRule()
-          .whenTextContains("Bank Holiday Overtime")
-          .setBackground("#fce5cd") // Light orange
-          .setRanges([activeRangeC])
-          .build();
+      // Rules for Type column (Column C)
+      const bhOvertimeRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Bank Holiday Overtime")
+        .setBackground("#fce5cd") // Light orange
+        .setRanges([colCRange])
+        .build();
 
-        const overtimeRule = SpreadsheetApp.newConditionalFormatRule()
-          .whenTextContains("Overtime")
-          .setBackground("#fff2cc") // Light yellow
-          .setRanges([activeRangeC])
-          .build();
-          
-        const studyLeaveRule = SpreadsheetApp.newConditionalFormatRule()
-          .whenTextContains("Study Leave/Other")
-          .setBackground("#c9daf8") // Light blue
-          .setRanges([activeRangeC])
-          .build();
-          
-        rules.push(bhOvertimeRule, overtimeRule, studyLeaveRule);
-      }
-      // Re-apply updated rules list (clears out the old structural shift layout)
+      const overtimeRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Overtime")
+        .setBackground("#fff2cc") // Light yellow
+        .setRanges([colCRange])
+        .build();
+        
+      const studyLeaveRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Study Leave/Other")
+        .setBackground("#c9daf8") // Light blue
+        .setRanges([colCRange])
+        .build();
+        
+      rules.push(bhOvertimeRule, overtimeRule, studyLeaveRule);
+      
+      // Apply the global rules to overwrite the previous configurations
       sheet.setConditionalFormatRules(rules);
+      SpreadsheetApp.flush(); // Force immediate rendering of conditional formats
 
       if (changeRows.length > 0) {
         if (dividerRowIndex === -1) {
@@ -379,6 +379,7 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
   const staffSheet = ss.getSheetByName("staffList");
   if (!staffSheet) return; 
 
+  // Set up Column C Header & Data Validation
   if (staffSheet.getRange("C1").getValue() !== "Status") {
     staffSheet.getRange("C1").setValue("Status").setFontWeight("bold").setBackground("#e0e0e0");
   }
@@ -389,12 +390,35 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
     .build();
   staffSheet.getRange("C2:C").setDataValidation(statusRule);
 
+  // --- APPLY GLOBAL CONDITIONAL FORMATTING FOR STATUS COLUMN (C2:C) ---
+  const colCRange = staffSheet.getRange("C2:C");
+  const activeRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Active")
+    .setBackground("#c8e6c9") // Light Green
+    .setRanges([colCRange])
+    .build();
+    
+  const inactiveRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Inactive")
+    .setBackground("#e0e0e0") // Light Grey
+    .setRanges([colCRange])
+    .build();
+    
+  const blockedRule = SpreadsheetApp.newConditionalFormatRule()
+    .whenTextEqualTo("Blocked")
+    .setBackground("#ffcdd2") // Light Red
+    .setRanges([colCRange])
+    .build();
+
+  staffSheet.setConditionalFormatRules([activeRule, inactiveRule, blockedRule]);
+
   const searchName = String(userInfo.name || "").trim().toLowerCase();
   if (!searchName) return; 
 
   let lastRow = staffSheet.getLastRow();
   let targetRowIndex = -1;
 
+  // 1. Search for the user in Column A
   if (lastRow > 1) {
     const names = staffSheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
     for (let i = 0; i < names.length; i++) {
@@ -405,6 +429,7 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
     }
   }
 
+  // 2. Mark Submitter Green or Append and Color Orange
   if (targetRowIndex > 0) {
     staffSheet.getRange(targetRowIndex, 1).setBackground("#c8e6c9");
   } else {
@@ -413,6 +438,7 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
     staffSheet.getRange(lastRow, 1).setBackground("#ffe0b2");
   }
 
+  // 3. Highlight missing staff Red dynamically if someone submits a late timesheet
   if (submissionPeriod) {
     const periodDate = new Date("1 " + submissionPeriod); 
     if (!isNaN(periodDate.getTime())) {
