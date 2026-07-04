@@ -1,379 +1,583 @@
 /**
- * --- ADMIN MENU SETUP ---
+ * GOOGLE APPS SCRIPT - SINGLE HEADER VERSION
+ * ------------------------------------------
+ * 1. USER TABS: Appends data with ONE Header Row (Timestamp). (New v71a - adds conditional formatting to the user tabs to highlight non-standard shifts)
+ * 2. INDEX TAB: Updates horizontally.
+ * 3. STAFF LIST: Tracks submitted timesheets (Green=Submitted, Orange=New, Red=Missing).
+ * v71 - Enforces Tab Ordering (Inserted dynamically after "Overtime Report")
  */
-function onOpen() {
-  const ui = SpreadsheetApp.getUi();
-  ui.createMenu('📄 Timesheet Admin')
-    .addItem('🚀 Process "Checked" Timesheets', 'processCheckedItems')
-    .addSeparator()
-    .addItem('🔴 Highlight missing staff (Red)', 'admin_HighlightMissingStaffRed')
-    .addItem('🟢 Reset staff list colours', 'admin_ResetStaffListColors')
-    .addItem('📧 Send email to missing staff (custom email msg)', 'admin_SendReminders')
-    .addSeparator()
-    .addItem('🔐 Re-authorise email permissions', 'checkEmailPermissions') 
-    .addSeparator()
-    .addItem('🧹 +++ Monthly Reset & Archive +++', 'archiveAndResetSpreadsheet')
-    .addToUi();
 
-  SpreadsheetApp.getActiveSpreadsheet().toast(
-    "Manager tools loaded. Use the menu at the top.", 
-    "Admin Ready", 
-    5
-  );
-}
-
-// ==========================================================================
-// PART 1: PDF PROCESSING & EMAILING
-// ==========================================================================
-
-function processCheckedItems() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const indexSheet = ss.getSheetByName("Index");
-  const templateSheet = ss.getSheetByName("printTemplate");
-  const ui = SpreadsheetApp.getUi();
-
-  const MAX_BATCH_SIZE = 10; 
-  
-  if (!indexSheet || !templateSheet) {
-    ui.alert("Required sheets (Index or printTemplate) not found!");
-    return;
+function doPost(e) {
+  const lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: "Server busy, please try again."}));
   }
-
-  const folder = getOrCreateFolder("Processed Timesheets");
-  const lastRowIndex = indexSheet.getLastRow();
-  if (lastRowIndex < 2) {
-    ui.alert("No data found in Index.");
-    return;
-  }
-
-  const coreDataRange = indexSheet.getRange(2, 1, lastRowIndex - 1, 6); 
-  const coreData = coreDataRange.getDisplayValues(); 
-  const executionDate = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), "dd/MM/yyyy");
-  
-  let totalCheckedFound = 0;
-  for (let i = 0; i < coreData.length; i++) {
-    if (coreData[i][0] === "Checked") totalCheckedFound++;
-  }
-
-  if (totalCheckedFound === 0) {
-    ui.alert("No rows marked 'Checked' found.");
-    return;
-  }
-
-  ss.toast(`Found ${totalCheckedFound} items. Processing batch...`, "System Started", -1);
-  SpreadsheetApp.flush();
-
-  let processedCount = 0;
-  let emailCount = 0;
-  let skippedCount = 0;
-  let errors = [];
-
-  for (let i = 0; i < coreData.length; i++) {
-    if (processedCount >= MAX_BATCH_SIZE) break;
-
-    const [status, authoriser, name, assignment, email, period] = coreData[i];
-
-    if (status === "Checked") {
-      const rowNum = i + 2;
-
-      // VALIDATION: Skip if Authoriser is "Unchecked"
-      if (String(authoriser).trim().toLowerCase() === "unchecked") {
-        indexSheet.getRange(rowNum, 2).setBackground("#f8bbd0"); // Pink
-        skippedCount++;
-        continue; 
-      }
-
-      ss.toast(`Processing item ${processedCount + 1}... \nUser: ${name}`, "⏳ Working...", -1);
-      
-      try {
-        const totalCols = indexSheet.getLastColumn();
-        let postedDateFormatted = "";
-        if (totalCols >= 7) {
-          const dateRowValues = indexSheet.getRange(rowNum, 7, 1, totalCols - 6).getValues()[0];
-          let rawPostedDate = "";
-          for (let j = dateRowValues.length - 1; j >= 0; j--) {
-            if (dateRowValues[j] !== "" && dateRowValues[j] !== null) {
-              rawPostedDate = dateRowValues[j];
-              break;
-            }
-          }
-          postedDateFormatted = (rawPostedDate instanceof Date) 
-            ? Utilities.formatDate(rawPostedDate, Session.getScriptTimeZone(), "dd/MM/yyyy")
-            : String(rawPostedDate);
-        }
-
-        let safeName = String(name).trim().replace(/[:\\\/?*\[\]]/g, ""); 
-        let tabName = `${safeName} - ${assignment} - ${period}`;
-        const sourceSheet = ss.getSheetByName(tabName);
-
-        if (sourceSheet) {
-          const shiftData = extractShiftData(sourceSheet);
-          const workerSubmissionDate = getWorkerSubmissionDate(sourceSheet);
-
-          const tempSS = createPopulatedTemplate(ss, templateSheet, name, assignment, period, authoriser, executionDate, workerSubmissionDate, postedDateFormatted, shiftData);
-          const pdfBlob = convertToPDF(tempSS, tabName);
-          folder.createFile(pdfBlob); 
-          
-          const cleanEmail = email ? email.toString().trim() : "";
-          if (cleanEmail !== "" && cleanEmail.includes("@")) {
-            try {
-              GmailApp.sendEmail(cleanEmail, "Approved Timesheet - " + period, "Please find attached your approved timesheet for " + period + ".\n\nAuthorised by: " + authoriser, {
-                  attachments: [pdfBlob],
-                  name: "Timesheet System"
-              });
-              emailCount++;
-            } catch (emailErr) {
-              errors.push(`Email failed for ${name}: ${emailErr.toString()}`);
-            }
-          } else {
-             errors.push(`No valid email for ${name} (PDF saved)`);
-          }
-
-          DriveApp.getFileById(tempSS.getId()).setTrashed(true); 
-          indexSheet.getRange(rowNum, 2).setBackground(null);
-          indexSheet.getRange(rowNum, 1).setValue("Completed");
-          processedCount++;
-          
-        } else {
-          errors.push("Tab not found: " + tabName);
-        }
-      } catch (e) {
-        errors.push(`Row ${rowNum} (${name}): ${e.toString()}`);
-      }
-      SpreadsheetApp.flush(); 
-    }
-  }
-
-  // --- FINAL REPORTING ---
-  const remainingCount = totalCheckedFound - processedCount - skippedCount;
-  let message = `Batch Complete.\n${processedCount} timesheets generated.\n${emailCount} emails sent.`;
-
-  if (skippedCount > 0) {
-    message += `\n\n⚠️ ${skippedCount} items were SKIPPED (Authoriser was "Unchecked").`;
-  }
-  if (remainingCount > 0) {
-    message += `\n\n⚠️ BATCH LIMIT REACHED. ${remainingCount} items remaining. Please run again.`;
-  } else if (skippedCount === 0) {
-    message += `\n\n✅ All items processed!`;
-  }
-  if (errors.length > 0) {
-    message += "\n\n⚠️ Issues:\n" + errors.join("\n");
-  }
-  
-  ss.toast("Batch finished.", "Done", 3);
-  ui.alert("Batch Processing Result", message, ui.ButtonSet.OK);
-}
-
-function createPopulatedTemplate(ss, templateSheet, name, assignment, period, authoriser, execDate, workerDate, postedDate, shiftData) {
-  const tempSS = SpreadsheetApp.create("Temp_PDF_Export");
-  templateSheet.copyTo(tempSS).setName("Timesheet");
-  tempSS.deleteSheet(tempSS.getSheets()[0]);
-  const sheet = tempSS.getSheets()[0];
-
-  const replacements = {
-    "{{Name}}": name,
-    "{{Assignment}}": assignment,
-    "{{Period}}": period,
-    "{{Authoriser}}": authoriser,
-    "{{Date}}": execDate,
-    "{{WorkerDate}}": workerDate,
-    "{{PostedDate}}": postedDate
-  };
-
-  const fullRange = sheet.getDataRange();
-  const values = fullRange.getValues();
-
-  for (let r = 0; r < values.length; r++) {
-    for (let c = 0; c < values[r].length; c++) {
-      let cellValue = String(values[r][c]).trim();
-      if (cellValue in replacements) sheet.getRange(r + 1, c + 1).setValue(replacements[cellValue]);
-      
-      if (cellValue === "{{TableStart}}") {
-        shiftData.forEach(function(shift) {
-          sheet.getRange(r + 1 + shift.day, c + 1 + 2, 1, shift.data.length).setValues([shift.data]);
-        });
-        sheet.getRange(r + 1, c + 1).clearContent();
-      }
-    }
-  }
-  return tempSS;
-}
-
-function extractShiftData(sourceSheet) {
-  const allData = sourceSheet.getDataRange().getValues();
-  let results = [];
-  for (let i = 1; i < allData.length; i++) { 
-    if (String(allData[i][0]).includes("HISTORY OF CHANGES")) break;
-    let row = allData[i];
-    if (row[0] instanceof Date) {
-      let rawShiftRow = [row[1], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11], row[12], row[13]];
-      let cleanedShiftRow = rawShiftRow.map(val => (val === 0 || val === "0" || val === "0.00") ? "" : val);
-      results.push({ day: row[0].getDate(), data: cleanedShiftRow });
-    }
-  }
-  return results;
-}
-
-function getWorkerSubmissionDate(sourceSheet) {
-  const rowData = sourceSheet.getRange(2, 1, 1, sourceSheet.getLastColumn()).getValues()[0];
-  let rawDate = "";
-  for (let j = rowData.length - 1; j >= 0; j--) {
-    if (rowData[j] !== "" && rowData[j] !== null) {
-      rawDate = rowData[j];
-      break;
-    }
-  }
-  return (rawDate instanceof Date) ? Utilities.formatDate(rawDate, Session.getScriptTimeZone(), "dd/MM/yyyy") : String(rawDate);
-}
-
-function convertToPDF(ss, fileName) {
-  SpreadsheetApp.flush();
-  const params = ['format=pdf', 'size=A4', 'portrait=true', 'fitw=true', 'top_margin=0.40', 'bottom_margin=0.40', 'left_margin=0.40', 'right_margin=0.40', 'gridlines=false', 'printtitle=false', 'fzr=false', 'gid=' + ss.getSheets()[0].getSheetId()].join('&');
-  const url = `https://docs.google.com/spreadsheets/d/${ss.getId()}/export?${params}`;
-  const response = UrlFetchApp.fetch(url, { headers: { 'Authorization': 'Bearer ' + ScriptApp.getOAuthToken() } });
-  return response.getBlob().setName(fileName + ".pdf");
-}
-
-function getOrCreateFolder(name) {
-  const folders = DriveApp.getFoldersByName(name);
-  return folders.hasNext() ? folders.next() : DriveApp.createFolder(name);
-}
-
-// ==========================================================================
-// PART 2: ARCHIVE & RESET LOGIC
-// ==========================================================================
-
-function archiveAndResetSpreadsheet() {
-  const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  
-  const response = ui.prompt('Monthly Reset & Archive', 'Enter a name for the archive copy (e.g., "Timesheets - January 2026"):', ui.ButtonSet.OK_CANCEL);
-  if (response.getSelectedButton() !== ui.Button.OK) return;
-  
-  const archiveName = response.getResponseText().trim();
-  if (!archiveName) {
-    ui.alert("Reset Cancelled: You must provide a name for the archive.");
-    return;
-  }
-
-  const confirm = ui.alert("Final Confirmation", "This will save a copy called '" + archiveName + "' and then PERMANENTLY delete all current data and user tabs from THIS spreadsheet. Continue?", ui.ButtonSet.YES_NO);
-  if (confirm !== ui.Button.YES) return;
 
   try {
-    DriveApp.getFileById(ss.getId()).makeCopy(archiveName);
+    // 1. PARSE INPUT
+    if (!e || !e.postData) return ContentService.createTextOutput(JSON.stringify({result: "error", error: "No data received"}));
     
-    const indexSheet = ss.getSheetByName("Index");
-    if (indexSheet && indexSheet.getLastRow() > 1) {
-      indexSheet.getRange(2, 1, indexSheet.getLastRow() - 1, indexSheet.getMaxColumns()).clearContent();
+    const data = JSON.parse(e.postData.contents);
+    const userInfo = data.user;
+    const shifts = data.shifts || []; 
+    
+    // Determine Period
+    let submissionPeriod = data.period;
+    if (!submissionPeriod && shifts.length > 0) {
+      submissionPeriod = getMonthYear(shifts[0].date);
+    } else if (!submissionPeriod) {
+      submissionPeriod = getMonthYear(new Date()); 
     }
 
-    const keepSheets = ["Index", "staffList", "printTemplate", "Authorisers"];
-    ss.getSheets().forEach(sheet => {
-      if (!keepSheets.includes(sheet.getName())) ss.deleteSheet(sheet);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const timestamp = new Date();
+    const ukDate = timestamp.toLocaleDateString("en-GB"); 
+    const ukTime = timestamp.toLocaleTimeString("en-GB"); 
+    const fullTimestamp = `${ukDate} ${ukTime}`;
+    
+    // Tab Name
+    let safeName = userInfo.name.replace(/[:\\\/?*\[\]]/g, ""); 
+    let tabName = `${safeName} - ${userInfo.assignmentNumber} - ${submissionPeriod}`;
+    if (tabName.length > 100) tabName = tabName.substring(0, 100);
+
+    let sheet = ss.getSheetByName(tabName);
+
+    // Create User Tab if missing
+    if (!sheet) {
+      // ENFORCE TAB ORDER: Insert new user tab immediately after "Overtime Report"
+      let insertIndex = 3; // Fallback default if missing (0=Index, 1=staffList, 2=Overtime -> insert at 3)
+      const otSheet = ss.getSheetByName("Overtime Report");
+      if (otSheet) {
+        // getIndex() is 1-based, which matches the 0-based insert index to put it AFTER this sheet
+        insertIndex = otSheet.getIndex(); 
+      }
+      
+      sheet = ss.insertSheet(tabName, insertIndex);
+      
+      const headers = [
+        "Date", "Weekday", "Type", "Start", "End", 
+        "UH Sat", "UH Sun", "UH Night", "UH BH", 
+        "Extra Hrs", "OT M-F", "OT Sat", "OT Sun", "OT BH", 
+        "TOIL Acc", "TOIL Used", "AL Used", "Notes", "Timestamp"
+      ];
+      
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]).setFontWeight("bold").setBackground("#e0e0e0");
+      sheet.setFrozenRows(1);
+      sheet.getRange("A:A").setNumberFormat("dd-mm-yyyy"); 
+      sheet.getRange("D:E").setNumberFormat("@"); 
+      
+      const rules = sheet.getConditionalFormatRules();
+
+      // Conditional Formatting for TOIL, AL, Notes & Timestamp cols (O, P, Q, R, S)
+      const rule = SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied('=AND(ROW()>1, O1<>"")')
+        .setBackground("#fce4ec")
+        .setRanges([sheet.getRange("O1:S")])
+        .build();
+      rules.push(rule);
+      
+      // Conditional Formatting for Type col (C)
+      const colCRange = sheet.getRange("C2:C");
+      
+      // We set "Bank Holiday Overtime" first so it is evaluated before "Overtime" 
+      // when using text containment checks.
+      const bhOvertimeRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Bank Holiday Overtime")
+        .setBackground("#fce5cd") // Light orange
+        .setRanges([colCRange])
+        .build();
+
+      const overtimeRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Overtime")
+        .setBackground("#fff2cc") // Light yellow
+        .setRanges([colCRange])
+        .build();
+        
+      const studyLeaveRule = SpreadsheetApp.newConditionalFormatRule()
+        .whenTextContains("Study Leave/Other")
+        .setBackground("#c9daf8") // Light blue
+        .setRanges([colCRange])
+        .build();
+        
+      rules.push(bhOvertimeRule, overtimeRule, studyLeaveRule);
+
+      // Apply all rules to the sheet
+      sheet.setConditionalFormatRules(rules);
+    }
+
+    // 2. READ CURRENT SNAPSHOT
+    const allValues = sheet.getDataRange().getValues();
+    let dividerRowIndex = -1; 
+
+    for (let i = 0; i < allValues.length; i++) {
+      if (String(allValues[i][0]) === "--- HISTORY OF CHANGES ---") {
+        dividerRowIndex = i;
+        break;
+      }
+    }
+
+    const snapshotEndIndex = (dividerRowIndex === -1) ? allValues.length : dividerRowIndex;
+    const latestStateMap = new Map(); 
+    
+    if (snapshotEndIndex > 1) {
+      for (let i = 1; i < snapshotEndIndex; i++) {
+        const row = allValues[i];
+        if (isValidDataRow(row)) {
+          const dateStr = formatDate(new Date(row[0]));
+          latestStateMap.set(dateStr, row);
+        }
+      }
+    }
+
+    // 3. PROCESS SHIFTS
+    const cleanRows = [];
+    const changeRows = [];
+    const touchedDates = new Set(); 
+    let hasActualChanges = false;
+
+    // A. Process Incoming
+    shifts.forEach(shift => {
+      const rowDateStr = shift.date;
+      const noteInput = shift.notes || "";
+      touchedDates.add(rowDateStr);
+      const dateObject = new Date(shift.date);
+
+      const baseRowData = [
+        dateObject,
+        shift.weekday, shift.shiftType,
+        shift.startTime, shift.finishTime,
+        Number(shift.uhSat), Number(shift.uhSun), Number(shift.uhNight), Number(shift.uhBH),
+        Number(shift.extraHoursWorked), Number(shift.otMonFri), Number(shift.otSat), Number(shift.otSun), Number(shift.otBH),
+        Number(shift.toilAccrued), Number(shift.toilUsed), Number(shift.annualLeaveUsed),
+        noteInput, timestamp
+      ];
+
+      cleanRows.push([...baseRowData]); 
+
+      if (latestStateMap.has(rowDateStr)) {
+        const existingData = latestStateMap.get(rowDateStr);
+        const inputCompData = baseRowData.slice(0, 17);
+
+        let isDifferent = false;
+        for (let c = 1; c <= 16; c++) {
+          if (normalize(existingData[c]) !== normalize(inputCompData[c])) {
+            isDifferent = true;
+            break;
+          }
+        }
+
+        if (isDifferent) {
+          const oldRow = [...existingData]; 
+          const oldNotes = String(oldRow[17] || "");
+          oldRow[17] = (oldNotes ? oldNotes + " " : "") + `[AMENDED]`; 
+          oldRow[18] = timestamp; 
+          changeRows.push(oldRow);
+          hasActualChanges = true;
+        }
+      } else {
+        if (latestStateMap.size > 0) {
+            const newRow = [...baseRowData];
+            newRow[17] = (noteInput ? noteInput + " " : "") + `[NEW]`;
+            changeRows.push(newRow);
+            hasActualChanges = true;
+        } else {
+            hasActualChanges = true; 
+        }
+      }
     });
 
-    admin_ResetStaffListColors(true); 
+    // B. Check Deletions
+    latestStateMap.forEach((val, keyDate) => {
+      if (!touchedDates.has(keyDate)) {
+        const deletedRow = [...val]; 
+        const oldNotes = String(deletedRow[17] || "");
+        deletedRow[17] = (oldNotes ? oldNotes + " " : "") + `[DELETED]`; 
+        deletedRow[18] = timestamp; 
+        changeRows.push(deletedRow);
+        hasActualChanges = true;
+      }
+    });
 
-    ui.alert("Success!", "Archive saved and spreadsheet reset.", ui.ButtonSet.OK);
+    // 4. UPDATE SHEET
+    if (hasActualChanges || latestStateMap.size === 0) {
+      const rowsToDelete = snapshotEndIndex - 1; 
+      if (rowsToDelete > 0) sheet.deleteRows(2, rowsToDelete);
 
-  } catch (e) {
-    ui.alert("An error occurred: " + e.toString());
-  }
-}
+      if (cleanRows.length > 0) {
+        sheet.insertRowsAfter(1, cleanRows.length);
+        const range = sheet.getRange(2, 1, cleanRows.length, 19);
+        range.setValues(cleanRows);
+        range.setBackground(null).setFontWeight("normal");
+        sheet.getRange(2, 1, cleanRows.length, 1).setNumberFormat("dd-mm-yyyy");
+        sheet.getRange(2, 4, cleanRows.length, 2).setNumberFormat("@");
+      }
 
-function checkEmailPermissions() {
-  const ui = SpreadsheetApp.getUi();
-  const remainingQuota = GmailApp.getRemainingDailyQuota();
-  ui.alert("✅ System Ready", "Quota: " + remainingQuota + " emails remaining.", ui.ButtonSet.OK);
-}
+      if (changeRows.length > 0) {
+        if (dividerRowIndex === -1) {
+           sheet.appendRow(["--- HISTORY OF CHANGES ---"]);
+           sheet.getRange(sheet.getLastRow(), 1, 1, 19).setBackground("#ffe0b2").setFontWeight("bold");
+        }
+        const batchHeader = new Array(19).fill("");
+        batchHeader[0] = `Changes @ ${fullTimestamp}`;
+        changeRows.unshift(batchHeader);
+        
+        const historyColors = changeRows.map(row => {
+           const note = String(row[17]);
+           if(note.includes("[DELETED]")) return new Array(19).fill("#ffcdd2"); 
+           if(note.includes("[AMENDED]")) return new Array(19).fill("#fff9c4"); 
+           if(note.includes("[NEW]")) return new Array(19).fill("#c8e6c9"); 
+           return new Array(19).fill("#e0e0e0"); 
+        });
 
-// ==========================================================================
-// PART 3: STAFF LIST ADMIN TOOLS
-// ==========================================================================
+        const startRow = sheet.getLastRow() + 1;
+        sheet.getRange(startRow, 1, changeRows.length, 19).setValues(changeRows);
+        sheet.getRange(startRow, 1, changeRows.length, 19).setBackgrounds(historyColors);
+        sheet.getRange(startRow, 1, 1, 19).setFontWeight("bold"); 
+      }
 
-function admin_HighlightMissingStaffRed() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const staffSheet = ss.getSheetByName("staffList");
-  if (!staffSheet) return;
-  
-  const lastRow = staffSheet.getLastRow();
-  if (lastRow > 1) {
-    const bgRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
-    const backgrounds = bgRange.getBackgrounds();
-    for (let i = 0; i < backgrounds.length; i++) {
-      const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
-      if (bg === "#ffffff" || bg === "#fff" || bg === "") backgrounds[i][0] = "#ffcdd2";
+      // Update Index with Email
+      updateIndexTab(ss, userInfo, submissionPeriod, fullTimestamp);
+      
+      // Update the staffList tab
+      updateStaffList(ss, userInfo, submissionPeriod);
+
+      return ContentService.createTextOutput(JSON.stringify({result: "success", message: `Processed successfully.`})).setMimeType(ContentService.MimeType.JSON);
+    } else {
+      return ContentService.createTextOutput(JSON.stringify({result: "success", message: "No changes detected."})).setMimeType(ContentService.MimeType.JSON);
     }
-    bgRange.setBackgrounds(backgrounds);
+
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({result: "error", error: error.toString()})).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
-  ss.toast("Missing staff highlighted red.");
 }
 
-function admin_ResetStaffListColors(silent) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const staffSheet = ss.getSheetByName("staffList");
-  if (!staffSheet) return;
-  const lastRow = staffSheet.getLastRow();
-  if (lastRow > 1) staffSheet.getRange(2, 1, lastRow - 1, 1).setBackground(null);
-  if (!silent) ss.toast("Staff list colors reset.");
+/**
+ * INDEX FUNCTION
+ */
+function updateIndexTab(ss, userInfo, period, timestampStr) {
+  let indexSheet = ss.getSheetByName("Index");
+  // ENFORCE TAB ORDER: Ensure Index is created at position 0 (first tab)
+  if (!indexSheet) indexSheet = ss.insertSheet("Index", 0);
+
+  // INSERT HEADERS
+  if (indexSheet.getLastRow() === 0) {
+    const headers = ["Status", "Authoriser", "Name", "Assignment no", "Email", "Month/Year", "Date 1st Posted"];
+    indexSheet.appendRow(headers);
+    indexSheet.setFrozenRows(1);
+    indexSheet.getRange(1, 1, 1, headers.length).setFontWeight("bold").setBackground("#e0e0e0");
+    
+    // Apply Conditional Rule
+    const range = indexSheet.getRange("A2:A");
+    const rule = SpreadsheetApp.newConditionalFormatRule()
+      .whenTextEqualTo("AMENDED AFTER CHECK")
+      .setBackground("#d81b60") 
+      .setFontColor("#ffffff")  
+      .setRanges([range])
+      .build();
+    const rules = indexSheet.getConditionalFormatRules();
+    rules.push(rule);
+    indexSheet.setConditionalFormatRules(rules);
+  }
+
+  // SEARCH FOR EXISTING ENTRY
+  const lastRow = indexSheet.getLastRow();
+  let targetRowIndex = -1;
+
+  if (lastRow > 1) {
+    const searchName = String(userInfo.name).trim().toLowerCase();
+    const searchAssign = String(userInfo.assignmentNumber).trim().toLowerCase();
+    const searchPeriod = String(period).trim().toLowerCase();
+
+    const indexData = indexSheet.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
+    
+    for (let i = 0; i < indexData.length; i++) {
+      const rowName = String(indexData[i][2]).trim().toLowerCase();
+      const rowAssign = String(indexData[i][3]).trim().toLowerCase();
+      const rowPeriod = String(indexData[i][5]).trim().toLowerCase(); 
+
+      if (rowName === searchName && rowAssign === searchAssign && rowPeriod === searchPeriod) {
+        targetRowIndex = i + 2; 
+        break;
+      }
+    }
+  }
+
+  if (targetRowIndex > 0) {
+    if (userInfo.email) indexSheet.getRange(targetRowIndex, 5).setValue(userInfo.email);
+
+    const statusCell = indexSheet.getRange(targetRowIndex, 1);
+    const statusText = statusCell.getDisplayValue().replace(/\s+/g, ' ').trim().toLowerCase();
+    
+    // Also adding "pdf already saved" here so it triggers the AMENDED AFTER CHECK warning if a user resubmits!
+    if (statusText === "checked" || statusText === "completed" || statusText === "pdf already saved") {
+      statusCell.setValue("AMENDED AFTER CHECK");
+      
+      const authCell = indexSheet.getRange(targetRowIndex, 2);
+      authCell.clearDataValidations(); 
+      authCell.setValue("Unchecked");
+      
+      const authoriserSheet = ss.getSheetByName("Authorisers");
+      if (authoriserSheet) {
+        const authRange = authoriserSheet.getRange("A2:A"); 
+        const authRule = SpreadsheetApp.newDataValidation().requireValueInRange(authRange).setAllowInvalid(false).build();
+        authCell.setDataValidation(authRule);
+      }
+    }
+
+    const maxSheetCols = indexSheet.getMaxColumns();
+    const rowValues = indexSheet.getRange(targetRowIndex, 1, 1, maxSheetCols).getValues()[0];
+    
+    let lastOccupiedColumnIndex = -1;
+    for (let i = rowValues.length - 1; i >= 0; i--) {
+      if (rowValues[i] !== "" && rowValues[i] != null) {
+        lastOccupiedColumnIndex = i;
+        break;
+      }
+    }
+    
+    if (lastOccupiedColumnIndex < 6) lastOccupiedColumnIndex = 6;
+    
+    let writeCol = lastOccupiedColumnIndex + 2;
+    if (writeCol > maxSheetCols) {
+      indexSheet.insertColumnAfter(maxSheetCols);
+    }
+    indexSheet.getRange(targetRowIndex, writeCol).setValue(timestampStr);
+
+  } else {
+    indexSheet.appendRow(["Received", "", userInfo.name, userInfo.assignmentNumber, userInfo.email, period, timestampStr]);
+    
+    const newRow = indexSheet.getLastRow();
+    const statusCell = indexSheet.getRange(newRow, 1);
+    
+    // UPDATED STATUS OPTIONS ARRAY (Added "Resend")
+    const statusOptions = ["Received", "Checked", "Failed check", "Completed", "AMENDED AFTER CHECK", "Pdf already saved", "Resend"];
+    
+    const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statusOptions, true).setAllowInvalid(false).build();
+    statusCell.setDataValidation(statusRule);
+    statusCell.setValue("Received"); 
+    statusCell.setBackground(null).setFontColor(null);
+
+    const authoriserCell = indexSheet.getRange(newRow, 2);
+    const authoriserSheet = ss.getSheetByName("Authorisers");
+    if (authoriserSheet) {
+      const authRange = authoriserSheet.getRange("A2:A"); 
+      const authRule = SpreadsheetApp.newDataValidation().requireValueInRange(authRange).setAllowInvalid(false).build();
+      authoriserCell.setDataValidation(authRule);
+      authoriserCell.setValue("Unchecked"); 
+    }
+  }
+  SpreadsheetApp.flush(); 
 }
 
-function admin_SendReminders() {
-  const ui = SpreadsheetApp.getUi();
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
+/**
+ * STAFF LIST FUNCTION
+ * Updates the staffList tab: Green if found, Orange if appended.
+ * Manages Column C (Status) drop-downs for Active/Inactive/Blocked.
+ * If submitted past the 1st of the next month, colors remaining staff Light Red.
+ */
+function updateStaffList(ss, userInfo, submissionPeriod) {
   const staffSheet = ss.getSheetByName("staffList");
+  if (!staffSheet) return; // Ignore if the tab doesn't exist
 
-  if (!staffSheet) return;
-  const lastRow = staffSheet.getLastRow();
-  if (lastRow < 2) return;
-
-  const dataRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
-  const data = dataRange.getValues();
-  const backgrounds = dataRange.getBackgrounds();
+  // --- NEW: Set up Column C Header & Data Validation ---
+  if (staffSheet.getRange("C1").getValue() !== "Status") {
+    staffSheet.getRange("C1").setValue("Status").setFontWeight("bold").setBackground("#e0e0e0");
+  }
   
-  let targetCount = 0;
-  for (let i = 0; i < data.length; i++) {
-    const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
-    if (bg !== "#c8e6c9" && bg !== "#ffe0b2" && data[i][0] !== "") targetCount++;
+  // Apply the Dropdown rule to C2 downwards
+  const statusRule = SpreadsheetApp.newDataValidation()
+    .requireValueInList(["Active", "Inactive", "Blocked"], true)
+    .setAllowInvalid(false)
+    .build();
+  staffSheet.getRange("C2:C").setDataValidation(statusRule);
+  // -----------------------------------------------------
+
+  const searchName = String(userInfo.name || "").trim().toLowerCase();
+  if (!searchName) return; 
+
+  let lastRow = staffSheet.getLastRow();
+  let targetRowIndex = -1;
+
+  // 1. Search for the user in Column A
+  if (lastRow > 1) {
+    const names = staffSheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
+    for (let i = 0; i < names.length; i++) {
+      if (String(names[i][0]).trim().toLowerCase() === searchName) {
+        targetRowIndex = i + 2;
+        break;
+      }
+    }
   }
 
-  if (targetCount === 0) {
-    ui.alert("Everyone has submitted!");
+  // 2. Mark Submitter Green or Append and Color Orange
+  if (targetRowIndex > 0) {
+    // Found -> Light Green
+    staffSheet.getRange(targetRowIndex, 1).setBackground("#c8e6c9");
+  } else {
+    // Not Found -> Append and color Light Orange
+    // Now appends Name (Col A), Email (Col B), and sets Status to "Active" (Col C)
+    staffSheet.appendRow([userInfo.name, userInfo.email || "", "Active"]);
+    lastRow = staffSheet.getLastRow(); // Update last row count after append
+    staffSheet.getRange(lastRow, 1).setBackground("#ffe0b2");
+  }
+
+  // 3. Highlight missing staff Red dynamically if someone submits a late timesheet
+  // (i.e. if the current date is on or after the 1st of the month following the submission period)
+  if (submissionPeriod) {
+    const periodDate = new Date("1 " + submissionPeriod); // e.g. "1 February 2026"
+    if (!isNaN(periodDate.getTime())) {
+      const nextMonthFirst = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, 1);
+      const now = new Date();
+      
+      if (now >= nextMonthFirst) {
+        lastRow = staffSheet.getLastRow(); // Refresh in case we appended
+        if (lastRow > 1) {
+          const bgRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
+          const backgrounds = bgRange.getBackgrounds();
+          let changed = false;
+          
+          for (let i = 0; i < backgrounds.length; i++) {
+            const bgRaw = backgrounds[i][0];
+            const bg = bgRaw ? String(bgRaw).toLowerCase() : "";
+            // If cell has no background (white or empty), turn it light red.
+            // (This leaves existing Green #c8e6c9 and Orange #ffe0b2 alone)
+            if (bg === "#ffffff" || bg === "#fff" || bg === "") {
+              backgrounds[i][0] = "#ffcdd2"; // Light Red
+              changed = true;
+            }
+          }
+          if (changed) {
+            bgRange.setBackgrounds(backgrounds);
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * UTILITY: Send PDF to User
+ */
+function sendPdfToUser(userEmail, tabName, emailSubject, emailBody) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  const sheet = ss.getSheetByName(tabName);
+  
+  if (!sheet) {
+    Logger.log("Sheet not found: " + tabName);
+    return;
+  }
+  
+  if (!userEmail || userEmail === "") {
+    Logger.log("No email address provided for " + tabName);
     return;
   }
 
-  const htmlContent = `
-    <html>
-      <body style="font-family: Arial; padding: 15px;">
-        <div style="color:red; font-weight:bold;">Sending to ${targetCount} staff.</div>
-        <p>Subject: <input type="text" id="subject" style="width:100%" value="Reminder: Timesheet Submission Due"></p>
-        <p>Message: <textarea id="body" style="width:100%; height:100px;">Dear {{Name}},</textarea></p>
-        <button onclick="send()">Send Emails</button>
-        <script>
-          function send() {
-            google.script.run.withSuccessHandler(()=>google.script.host.close())
-            .admin_ProcessEmails(document.getElementById('subject').value, document.getElementById('body').value);
-          }
-        </script>
-      </body>
-    </html>
-  `;
-  ui.showModalDialog(HtmlService.createHtmlOutput(htmlContent).setWidth(400).setHeight(350), 'Reminders');
+  const sheetId = sheet.getSheetId();
+  const spreadsheetId = ss.getId();
+
+  const url = "https://docs.google.com/spreadsheets/d/" + spreadsheetId + "/export" +
+              "?format=pdf&size=A4&fzr=true&portrait=true&fitw=true&gridlines=true&printtitle=false&sheetnames=false&pagenum=CENTER&gid=" + sheetId;
+
+  const params = { method: "GET", headers: { "authorization": "Bearer " + ScriptApp.getOAuthToken() } };
+  const response = UrlFetchApp.fetch(url, params);
+  const pdfBlob = response.getBlob().setName(tabName + ".pdf");
+
+  MailApp.sendEmail({
+    to: userEmail,
+    subject: emailSubject,
+    body: emailBody,
+    attachments: [pdfBlob]
+  });
+  
+  Logger.log("Email sent to " + userEmail);
 }
 
-function admin_ProcessEmails(customSubject, customBody) {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const staffSheet = ss.getSheetByName("staffList");
-  const data = staffSheet.getRange(2, 1, staffSheet.getLastRow()-1, 2).getValues();
-  const backgrounds = staffSheet.getRange(2, 1, staffSheet.getLastRow()-1, 1).getBackgrounds();
+// --- HELPERS ---
 
-  let sent = 0;
-  for (let i = 0; i < data.length; i++) {
-    const bg = backgrounds[i][0] ? String(backgrounds[i][0]).toLowerCase() : "";
-    if (bg !== "#c8e6c9" && bg !== "#ffe0b2" && data[i][1].includes("@")) {
-      GmailApp.sendEmail(data[i][1], customSubject, customBody.replace(/{{Name}}/ig, data[i][0]));
-      sent++;
+function isValidDataRow(row) {
+  if (row[0] instanceof Date) return true;
+  if (typeof row[0] === 'string' && row[0].match(/^\d{4}-\d{2}-\d{2}$/)) return true;
+  return false;
+}
+
+/**
+ * GET FUNCTION - Allows the web app to query the current status
+ */
+function doGet(e) {
+  // Extract parameters sent from the HTML app
+  const action = e.parameter.action;
+  
+  if (action === 'getStatus') {
+    const name = (e.parameter.name || "").trim().toLowerCase();
+    const assignment = (e.parameter.assignment || "").trim().toLowerCase();
+    const period = (e.parameter.period || "").trim().toLowerCase();
+    
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const indexSheet = ss.getSheetByName("Index");
+    
+    if (!indexSheet) {
+      return ContentService.createTextOutput(JSON.stringify({status: "System Error"}))
+        .setMimeType(ContentService.MimeType.JSON);
     }
+    
+    const lastRow = indexSheet.getLastRow();
+    if (lastRow > 1) {
+      // Pull data to search for the matching user and period
+      const data = indexSheet.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
+      
+      for (let i = 0; i < data.length; i++) {
+        const rowName = String(data[i][2]).trim().toLowerCase();
+        const rowAssign = String(data[i][3]).trim().toLowerCase();
+        const rowPeriod = String(data[i][5]).trim().toLowerCase();
+        
+        if (rowName === name && rowAssign === assignment && rowPeriod === period) {
+           // Return the exact status found in Column 1
+           return ContentService.createTextOutput(JSON.stringify({status: String(data[i][0]).trim()}))
+             .setMimeType(ContentService.MimeType.JSON);
+        }
+      }
+    }
+    
+    // If no row is found
+    return ContentService.createTextOutput(JSON.stringify({status: "Not Submitted"}))
+      .setMimeType(ContentService.MimeType.JSON);
   }
-  SpreadsheetApp.getUi().alert("Sent " + sent + " emails.");
+  
+  return ContentService.createTextOutput(JSON.stringify({error: "Invalid Action"}))
+      .setMimeType(ContentService.MimeType.JSON);
+}
+
+function formatDate(date) {
+  if (!date) return "";
+  const d = new Date(date);
+  if (isNaN(d.getTime())) return ""; 
+  let month = '' + (d.getMonth() + 1);
+  let day = '' + d.getDate();
+  const year = d.getFullYear();
+  if (month.length < 2) month = '0' + month;
+  if (day.length < 2) day = '0' + day;
+  return [year, month, day].join('-'); 
+}
+
+function getMonthYear(dateStr) {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return ""; 
+  const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+  return `${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function normalize(val) {
+  if (val instanceof Date) {
+    let h = val.getHours().toString().padStart(2, '0');
+    let m = val.getMinutes().toString().padStart(2, '0');
+    return `${h}:${m}`;
+  }
+  if (val === null || val === undefined || val === "") return "0.00";
+  if (typeof val === 'number') return val.toFixed(2);
+  return String(val).trim();
 }
