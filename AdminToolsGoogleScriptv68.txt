@@ -50,7 +50,6 @@ function doPost(e) {
       let insertIndex = 3; // Fallback default if missing (0=Index, 1=staffList, 2=Overtime -> insert at 3)
       const otSheet = ss.getSheetByName("Overtime Report");
       if (otSheet) {
-        // getIndex() is 1-based, which matches the 0-based insert index to put it AFTER this sheet
         insertIndex = otSheet.getIndex(); 
       }
       
@@ -67,44 +66,6 @@ function doPost(e) {
       sheet.setFrozenRows(1);
       sheet.getRange("A:A").setNumberFormat("dd-mm-yyyy"); 
       sheet.getRange("D:E").setNumberFormat("@"); 
-      
-      const rules = sheet.getConditionalFormatRules();
-
-      // Conditional Formatting for TOIL, AL, Notes & Timestamp cols (O, P, Q, R, S)
-      const rule = SpreadsheetApp.newConditionalFormatRule()
-        .whenFormulaSatisfied('=AND(ROW()>1, O1<>"")')
-        .setBackground("#fce4ec")
-        .setRanges([sheet.getRange("O1:S")])
-        .build();
-      rules.push(rule);
-      
-      // Conditional Formatting for Type col (C)
-      const colCRange = sheet.getRange("C2:C");
-      
-      // We set "Bank Holiday Overtime" first so it is evaluated before "Overtime" 
-      // when using text containment checks.
-      const bhOvertimeRule = SpreadsheetApp.newConditionalFormatRule()
-        .whenTextContains("Bank Holiday Overtime")
-        .setBackground("#fce5cd") // Light orange
-        .setRanges([colCRange])
-        .build();
-
-      const overtimeRule = SpreadsheetApp.newConditionalFormatRule()
-        .whenTextContains("Overtime")
-        .setBackground("#fff2cc") // Light yellow
-        .setRanges([colCRange])
-        .build();
-        
-      const studyLeaveRule = SpreadsheetApp.newConditionalFormatRule()
-        .whenTextContains("Study Leave/Other")
-        .setBackground("#c9daf8") // Light blue
-        .setRanges([colCRange])
-        .build();
-        
-      rules.push(bhOvertimeRule, overtimeRule, studyLeaveRule);
-
-      // Apply all rules to the sheet
-      sheet.setConditionalFormatRules(rules);
     }
 
     // 2. READ CURRENT SNAPSHOT
@@ -214,6 +175,44 @@ function doPost(e) {
         sheet.getRange(2, 4, cleanRows.length, 2).setNumberFormat("@");
       }
 
+      // --- APPLY CONDITIONAL FORMATTING TO ACTIVE DATA ROWS ---
+      const rules = [];
+      if (cleanRows.length > 0) {
+        const activeRangeC = sheet.getRange(2, 3, cleanRows.length, 1);     // Column C (Type)
+        const activeRangeOS = sheet.getRange(2, 15, cleanRows.length, 5);  // Columns O to S (TOIL, AL, Notes, Timestamp)
+
+        // Rule for TOIL, AL, Notes & Timestamp (Columns O to S) based on Column O having a value
+        const toilRule = SpreadsheetApp.newConditionalFormatRule()
+          .whenFormulaSatisfied('=$O2<>""')
+          .setBackground("#fce4ec") // Light pink
+          .setRanges([activeRangeOS])
+          .build();
+        rules.push(toilRule);
+
+        // Rules for Type column (Column C)
+        const bhOvertimeRule = SpreadsheetApp.newConditionalFormatRule()
+          .whenTextContains("Bank Holiday Overtime")
+          .setBackground("#fce5cd") // Light orange
+          .setRanges([activeRangeC])
+          .build();
+
+        const overtimeRule = SpreadsheetApp.newConditionalFormatRule()
+          .whenTextContains("Overtime")
+          .setBackground("#fff2cc") // Light yellow
+          .setRanges([activeRangeC])
+          .build();
+          
+        const studyLeaveRule = SpreadsheetApp.newConditionalFormatRule()
+          .whenTextContains("Study Leave/Other")
+          .setBackground("#c9daf8") // Light blue
+          .setRanges([activeRangeC])
+          .build();
+          
+        rules.push(bhOvertimeRule, overtimeRule, studyLeaveRule);
+      }
+      // Re-apply updated rules list (clears out the old structural shift layout)
+      sheet.setConditionalFormatRules(rules);
+
       if (changeRows.length > 0) {
         if (dividerRowIndex === -1) {
            sheet.appendRow(["--- HISTORY OF CHANGES ---"]);
@@ -260,7 +259,6 @@ function doPost(e) {
  */
 function updateIndexTab(ss, userInfo, period, timestampStr) {
   let indexSheet = ss.getSheetByName("Index");
-  // ENFORCE TAB ORDER: Ensure Index is created at position 0 (first tab)
   if (!indexSheet) indexSheet = ss.insertSheet("Index", 0);
 
   // INSERT HEADERS
@@ -312,7 +310,6 @@ function updateIndexTab(ss, userInfo, period, timestampStr) {
     const statusCell = indexSheet.getRange(targetRowIndex, 1);
     const statusText = statusCell.getDisplayValue().replace(/\s+/g, ' ').trim().toLowerCase();
     
-    // Also adding "pdf already saved" here so it triggers the AMENDED AFTER CHECK warning if a user resubmits!
     if (statusText === "checked" || statusText === "completed" || statusText === "pdf already saved") {
       statusCell.setValue("AMENDED AFTER CHECK");
       
@@ -353,7 +350,6 @@ function updateIndexTab(ss, userInfo, period, timestampStr) {
     const newRow = indexSheet.getLastRow();
     const statusCell = indexSheet.getRange(newRow, 1);
     
-    // UPDATED STATUS OPTIONS ARRAY (Added "Resend")
     const statusOptions = ["Received", "Checked", "Failed check", "Completed", "AMENDED AFTER CHECK", "Pdf already saved", "Resend"];
     
     const statusRule = SpreadsheetApp.newDataValidation().requireValueInList(statusOptions, true).setAllowInvalid(false).build();
@@ -381,20 +377,17 @@ function updateIndexTab(ss, userInfo, period, timestampStr) {
  */
 function updateStaffList(ss, userInfo, submissionPeriod) {
   const staffSheet = ss.getSheetByName("staffList");
-  if (!staffSheet) return; // Ignore if the tab doesn't exist
+  if (!staffSheet) return; 
 
-  // --- NEW: Set up Column C Header & Data Validation ---
   if (staffSheet.getRange("C1").getValue() !== "Status") {
     staffSheet.getRange("C1").setValue("Status").setFontWeight("bold").setBackground("#e0e0e0");
   }
   
-  // Apply the Dropdown rule to C2 downwards
   const statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(["Active", "Inactive", "Blocked"], true)
     .setAllowInvalid(false)
     .build();
   staffSheet.getRange("C2:C").setDataValidation(statusRule);
-  // -----------------------------------------------------
 
   const searchName = String(userInfo.name || "").trim().toLowerCase();
   if (!searchName) return; 
@@ -402,7 +395,6 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
   let lastRow = staffSheet.getLastRow();
   let targetRowIndex = -1;
 
-  // 1. Search for the user in Column A
   if (lastRow > 1) {
     const names = staffSheet.getRange(2, 1, lastRow - 1, 1).getDisplayValues();
     for (let i = 0; i < names.length; i++) {
@@ -413,28 +405,22 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
     }
   }
 
-  // 2. Mark Submitter Green or Append and Color Orange
   if (targetRowIndex > 0) {
-    // Found -> Light Green
     staffSheet.getRange(targetRowIndex, 1).setBackground("#c8e6c9");
   } else {
-    // Not Found -> Append and color Light Orange
-    // Now appends Name (Col A), Email (Col B), and sets Status to "Active" (Col C)
     staffSheet.appendRow([userInfo.name, userInfo.email || "", "Active"]);
-    lastRow = staffSheet.getLastRow(); // Update last row count after append
+    lastRow = staffSheet.getLastRow(); 
     staffSheet.getRange(lastRow, 1).setBackground("#ffe0b2");
   }
 
-  // 3. Highlight missing staff Red dynamically if someone submits a late timesheet
-  // (i.e. if the current date is on or after the 1st of the month following the submission period)
   if (submissionPeriod) {
-    const periodDate = new Date("1 " + submissionPeriod); // e.g. "1 February 2026"
+    const periodDate = new Date("1 " + submissionPeriod); 
     if (!isNaN(periodDate.getTime())) {
       const nextMonthFirst = new Date(periodDate.getFullYear(), periodDate.getMonth() + 1, 1);
       const now = new Date();
       
       if (now >= nextMonthFirst) {
-        lastRow = staffSheet.getLastRow(); // Refresh in case we appended
+        lastRow = staffSheet.getLastRow(); 
         if (lastRow > 1) {
           const bgRange = staffSheet.getRange(2, 1, lastRow - 1, 1);
           const backgrounds = bgRange.getBackgrounds();
@@ -443,10 +429,8 @@ function updateStaffList(ss, userInfo, submissionPeriod) {
           for (let i = 0; i < backgrounds.length; i++) {
             const bgRaw = backgrounds[i][0];
             const bg = bgRaw ? String(bgRaw).toLowerCase() : "";
-            // If cell has no background (white or empty), turn it light red.
-            // (This leaves existing Green #c8e6c9 and Orange #ffe0b2 alone)
             if (bg === "#ffffff" || bg === "#fff" || bg === "") {
-              backgrounds[i][0] = "#ffcdd2"; // Light Red
+              backgrounds[i][0] = "#ffcdd2"; 
               changed = true;
             }
           }
@@ -508,7 +492,6 @@ function isValidDataRow(row) {
  * GET FUNCTION - Allows the web app to query the current status
  */
 function doGet(e) {
-  // Extract parameters sent from the HTML app
   const action = e.parameter.action;
   
   if (action === 'getStatus') {
@@ -526,7 +509,6 @@ function doGet(e) {
     
     const lastRow = indexSheet.getLastRow();
     if (lastRow > 1) {
-      // Pull data to search for the matching user and period
       const data = indexSheet.getRange(2, 1, lastRow - 1, 6).getDisplayValues();
       
       for (let i = 0; i < data.length; i++) {
@@ -535,14 +517,12 @@ function doGet(e) {
         const rowPeriod = String(data[i][5]).trim().toLowerCase();
         
         if (rowName === name && rowAssign === assignment && rowPeriod === period) {
-           // Return the exact status found in Column 1
            return ContentService.createTextOutput(JSON.stringify({status: String(data[i][0]).trim()}))
              .setMimeType(ContentService.MimeType.JSON);
         }
       }
     }
     
-    // If no row is found
     return ContentService.createTextOutput(JSON.stringify({status: "Not Submitted"}))
       .setMimeType(ContentService.MimeType.JSON);
   }
